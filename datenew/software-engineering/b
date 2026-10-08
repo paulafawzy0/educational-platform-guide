@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "subject": "software-engineering",
+  "sections": [
+    {
+      "id": "se-sec-01",
+      "subject": "software-engineering",
+      "lecture": "المحاضرة الأولى",
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن A",
+      "status": "available",
+      "sectionTitle": "🧩 سكاشن هندسة البرمجيات",
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "files/se-sec-01.pdf", "type": "pdf" },
+        "exercises": { "label": "حلول التمارين", "url": "https://drive.google.com/drive/folders/1u-6l9DA9B123kEdBcPP_cTbIFv_BXDFu", "type": "link" }
+      }
+    },
+    {
+      "id": "se-sec-02",
+      "subject": "software-engineering",
+      "lecture": "المحاضرة الثانية - عمليات البرمجيات",
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن A",
+      "status": "available",
+      "sectionTitle": "🧩 سكاشن عمليات البرمجيات",
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "files/se-sec-02.pdf", "type": "pdf" },
+        "exercises": { "label": "حلول Chapter 2", "url": "https://drive.google.com/drive/folders/10a_t6aVTjLf6EBqJE-3OHFl76VelSvDt", "type": "link" }
+      }
+    }
+  ]
+}

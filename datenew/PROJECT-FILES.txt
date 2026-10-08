@@ -1,0 +1,1360 @@
+═══════════════════════════════════════════════════════════════════════
+   منصة المواد الدراسية — الملفات الكاملة (Templates + Guide)
+   آخر تحديث: 2026
+═══════════════════════════════════════════════════════════════════════
+
+   محتويات الملف:
+   ═══════════════════════════════════════════════════════════════════
+   📘 الجزء 1: دليل إضافة محاضرة وسكشن (GUIDE)
+   📁 الجزء 2: data/subjects-index.js
+   📁 الجزء 3: data/computer-networks.js
+   📁 الجزء 4: data/sections-computer-networks.json
+   📁 الجزء 5: data/sample.js
+   📁 الجزء 6: data/sections-sample.json
+   📁 الجزء 7: قوالب فارغة للنسخ السريع
+   ═══════════════════════════════════════════════════════════════════
+
+   طريقة الاستخدام:
+   1. أنشئ المجلدات: data/
+   2. انسخ كل جزء في الملف اللي اسمه فوقه
+   3. احفظ الملفات
+   4. افتح indexV5.html في المتصفح
+   ╔══════════════════════════════════════════════════════════════════╗
+║  📘 الجزء 1: دليل إضافة محاضرة وسكشن                             ║
+║  الاسم المقترح: TEMPLATE-GUIDE.md                                 ║
+╚══════════════════════════════════════════════════════════════════╝
+═══════════════════════════════════════════════════════════════════════
+                    📘 دليل إضافة محاضرة وسكشن
+═══════════════════════════════════════════════════════════════════════
+
+الهدف: ملف مرجعي كامل لكل مرة تحب تضيف محاضرة جديدة أو سكشن جديد.
+اتبع الخطوات بالترتيب وهيشتغل من أول مرة.
+
+═══════════════════════════════════════════════════════════════════════
+📑 الفهرس
+═══════════════════════════════════════════════════════════════════════
+1. قبل ما تبدأ — نظرة عامة
+2. إضافة محاضرة جديدة
+3. إضافة سكشن جديد
+4. شرح كل الحقول بالتفصيل
+5. أخطاء شائعة وكيفية تجنبها
+6. قوالب جاهزة للنسخ
+7. اختبار بعد الإضافة
+
+
+═══════════════════════════════════════════════════════════════════════
+1) قبل ما تبدأ — نظرة عامة
+═══════════════════════════════════════════════════════════════════════
+
+🗂️ هيكل الملفات:
+
+  project/
+  ├── indexV5.html                       ← الصفحة الرئيسية (مش هتتغير)
+  └── data/
+      ├── subjects-index.js              ← فهرس المواد
+      ├── computer-networks.js           ← ملف المحاضرات والأسئلة
+      ├── sections-computer-networks.json ← ملف السكاشن
+      ├── sample.js
+      └── sections-sample.json
+
+
+🔑 المفاهيم الأساسية:
+
+  ┌────────────────┬───────────────────────────────────┬──────────────────┐
+  │ المفهوم        │ معناه                              │ مثال              │
+  ├────────────────┼───────────────────────────────────┼──────────────────┤
+  │ المادة         │ ملف JS فيه كل محاضرات مادة واحدة   │ computer-networks│
+  │ المحاضرة       │ كائن داخل lectures[]               │ مقدمة الشبكات    │
+  │ السكشن         │ كائن داخل sections[] في JSON       │ سكشن A — م. أحمد  │
+  │ المعيد         │ شخص، وله instructorId ثابت         │ inst-ahmed       │
+  │ المجموعة       │ اسم المجموعة تحت المعيد            │ "سكشن A"         │
+  └────────────────┴───────────────────────────────────┴──────────────────┘
+
+
+⚠️ قاعدة ذهبية:
+   قبل أي إضافة، خد نسخة احتياطية من الملف اللي هتعدّله.
+   لو حصل خطأ، ترجع في ثانية.
+
+
+═══════════════════════════════════════════════════════════════════════
+2) إضافة محاضرة جديدة
+═══════════════════════════════════════════════════════════════════════
+
+📝 الخطوة 1: افتح ملف المادة
+   مثال: data/computer-networks.js
+
+📝 الخطوة 2: حدّد آخر محاضرة موجودة
+   دوّر على lectures: [ وافتح آخر قوس } قبل ].
+
+📝 الخطوة 3: ضيف فاصلة (,) بعد آخر محاضرة
+   كان:
+       }    ← آخر محاضرة قديمة
+     ]      ← قوس إغلاق lectures
+
+   يبقى:
+       },   ← ★ ضيف فاصلة هنا
+     ]
+
+📝 الخطوة 4: انسخ القالب التالي والصقه بعد الفاصلة:
+
+    // ═══════════════════════════════════════════════
+    // المحاضرة الرابعة — [اسم المحاضرة]
+    // ═══════════════════════════════════════════════
+    {
+      id: "net-lecture-04",
+      t: "المحاضرة الرابعة — Transport Layer",
+      d: "TCP, UDP, Flow Control, Congestion Control",
+      pdf: "files/net-4.pdf",
+      pdf2: "files/net-4-questions.pdf",
+      sectionTitle: "🧩 سكاشن Transport Layer",
+
+      links: [
+        { t: "🎥 تسجيل الفيديو", d: "المحاضرة كاملة", url: "https://example.com/net-4-video" },
+        { t: "📑 السلايدات", url: "https://example.com/net-4-slides" }
+      ],
+
+      linkCategories: [
+        {
+          category: "فيديوهات عربية",
+          icon: "🇪🇬",
+          description: "شروحات بالعربية",
+          links: [
+            {
+              t: "شرح TCP vs UDP",
+              d: "مقارنة مبسطة بالعربي",
+              icon: "🇪🇬",
+              actions: [
+                { label: "📖 الشرح", url: "https://youtube.com/...", type: "view", color: "red" }
+              ]
+            }
+          ]
+        }
+      ],
+
+      questions: [
+        {
+          q: "ما الفرق بين TCP و UDP؟",
+          options: [
+            "TCP موثوق ومنظم — UDP أسرع وغير موثوق",
+            "TCP أسرع",
+            "مفيش فرق",
+            "UDP للتشفير فقط"
+          ],
+          correct: 0,
+          translation: "What is the difference between TCP and UDP?",
+          explanation: "TCP يضمن التسليم والترتيب عبر Handshake — UDP أسرع بدون ضمانات."
+        },
+        {
+          type: "essay",
+          q: "اشرح مبدأ الـ Flow Control في TCP.",
+          answer:
+            "الـ Flow Control:\n" +
+            "• يمنع المُرسِل من إغراق المستقبِل.\n" +
+            "• بيستخدم Window Size اللي المستقبِل يعلن عنه.\n" +
+            "• لو الـ Buffer امتلأ، المستقبِل يعلن Window = 0.",
+          tags: ["TCP", "Flow Control"],
+          ref: "المحاضرة 4 — Section 3.5"
+        }
+      ],
+
+      notes: "راجع الأمثلة 1-3 قبل المحاضرة الجاية.",
+
+      summary: {
+        pdf: "files/net-4-summary.pdf",
+        text: "نقاط رئيسية:\n• TCP موثوق\n• UDP أسرع\n• Flow Control يمنع الازدحام"
+      }
+    }
+
+📝 الخطوة 5: تحقق من صحة القوس
+   بعد الإضافة، الملف لازم يبان كده:
+
+     lectures: [
+       { /* محاضرة 1 */ },
+       { /* محاضرة 2 */ },
+       { /* محاضرة 3 */ },
+       { /* محاضرة 4 الجديدة */ }   ← آخر واحد بدون فاصلة
+     ],
+
+
+✅ علامات النجاح:
+   [ ] id فريد (مش مكرر مع محاضرة تانية)
+   [ ] t مليان
+   [ ] الفاصلة , بعد كل محاضرة ما عدا الأخيرة
+   [ ] الأسئلة موجودة (ولو سؤال واحد)
+   [ ] type: "essay" موجود في الأسئلة المقالية
+
+
+═══════════════════════════════════════════════════════════════════════
+3) إضافة سكشن جديد
+═══════════════════════════════════════════════════════════════════════
+
+📝 الخطوة 1: افتح ملف السكاشن
+   مثال: data/sections-computer-networks.json
+
+📝 الخطوة 2: حدّد آخر سكشن
+   دوّر على آخر } قبل ] النهائية.
+
+📝 الخطوة 3: ضيف فاصلة (,) بعد آخر سكشن
+   كان:
+       }     ← آخر سكشن
+     ]       ← قوس إغلاق sections
+
+   يبقى:
+       },    ← ★ ضيف فاصلة
+     ]
+
+📝 الخطوة 4: انسخ القالب التالي والصقه:
+
+    {
+      "id": "net-sec-05",
+      "subject": "computer-networks",
+      "lectureId": "net-lecture-04",
+      "lecture": "المحاضرة الرابعة — Transport Layer",
+
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن A",
+      "status": "available",
+
+      "sectionTitle": "🧩 سكاشن Transport Layer",
+
+      "notes": "الحضور إجباري — في تمارين عملية.",
+
+      "materials": {
+        "file":      { "label": "ملف السكشن",   "url": "files/net-sec-05.pdf",     "type": "pdf" },
+        "exercises": { "label": "تمارين",        "url": "files/net-sec-05-ex.pdf",  "type": "pdf" },
+        "solution":  { "label": "الحل النموذجي", "url": "files/net-sec-05-sol.pdf", "type": "pdf" },
+        "recording": "https://example.com/net-sec-05-record",
+        "extraLinks": [
+          { "label": "مراجعة على YouTube", "url": "https://youtube.com/..." }
+        ]
+      },
+
+      "extraFiles": [
+        { "label": "ملف تمارين إضافي", "url": "files/net-sec-05-extra.pdf", "type": "pdf" },
+        { "label": "شرح إضافي",        "url": "https://example.com/extra",   "type": "video" }
+      ],
+
+      "task": {
+        "title": "واجب الأسبوع الرابع",
+        "url": "files/net-sec-05-task.pdf",
+        "dueDate": "2026-05-15",
+        "notes": "سلّم قبل الساعة 11 مساءً — الإجابة عبر Google Form."
+      }
+    }
+
+⚠️ ملاحظة مهمة عن instructorId:
+   - لو نفس المعيد موجود في سكاشن سابقة → استخدم نفس الـ instructorId.
+   - لو معيد جديد → اختر instructorId جديد مثل inst-mohamed.
+
+
+✅ علامات النجاح:
+   [ ] id فريد لكل سكشن
+   [ ] lectureId يطابق id المحاضرة اللي في ملف المادة
+   [ ] subject يطابق slug المادة في subjects-index.js
+   [ ] instructorId ثابت لكل معيد (نفس المعيد = نفس الـ ID)
+   [ ] الفاصلة , بعد كل سكشن ما عدا الأخير
+
+
+═══════════════════════════════════════════════════════════════════════
+4) شرح كل الحقول بالتفصيل
+═══════════════════════════════════════════════════════════════════════
+
+🎯 أ) حقول المحاضرة:
+
+  ┌──────────────┬──────────┬────────┬────────────────────┬───────────────────┐
+  │ الحقل        │ النوع    │ إجباري │ القيم الممكنة       │ ملاحظات           │
+  ├──────────────┼──────────┼────────┼────────────────────┼───────────────────┤
+  │ id           │ string   │ ✅     │ أي نص فريد          │ net-lecture-04    │
+  │ t            │ string   │ ✅     │ أي نص               │ عنوان المحاضرة    │
+  │ d            │ string   │ ❌     │ أي نص               │ وصف قصير          │
+  │ pdf          │ url/path │ ❌     │ ملف PDF             │ ملف المحاضرة      │
+  │ pdf2         │ url/path │ ❌     │ ملف PDF             │ ملف أسئلة منفصل   │
+  │ sectionTitle │ string   │ ❌     │ أي نص               │ عنوان قسم السكشن  │
+  │ links[]      │ array    │ ❌     │ كائنات روابط         │ روابط مباشرة      │
+  │ linkCategories[] │ array│ ❌     │ فئات روابط          │ روابط مجمّعة      │
+  │ questions[]  │ array    │ ❌     │ أسئلة MCQ/مقالي      │ بنك الأسئلة       │
+  │ notes        │ string   │ ❌     │ أي نص               │ ملاحظات وتكاليف   │
+  │ summary      │ object   │ ❌     │ {pdf, text}         │ ملخص              │
+  └──────────────┴──────────┴────────┴────────────────────┴───────────────────┘
+
+
+🎯 ب) حقول السكشن:
+
+  ┌────────────────┬──────────┬────────┬─────────────────────────┬───────────────┐
+  │ الحقل          │ النوع    │ إجباري │ القيم                    │ ملاحظات       │
+  ├────────────────┼──────────┼────────┼─────────────────────────┼───────────────┤
+  │ id             │ string   │ ✅     │ فريد                     │ net-sec-01    │
+  │ subject        │ string   │ ✅     │ نفس slug المادة          │ للتصفية       │
+  │ lectureId      │ string   │ ✅*    │ يطابق id المحاضرة         │ الأفضل        │
+  │ lecture        │ string   │ ✅*    │ عنوان المحاضرة           │ بديل          │
+  │ instructorId   │ string   │ ✅     │ فريد للمعيد              │ inst-ahmed    │
+  │ instructorName │ string   │ ✅     │ اسم المعيد               │ يظهر للمستخدم │
+  │ groupName      │ string   │ ❌     │ "سكشن A"                │ تمييز         │
+  │ status         │ string   │ ❌     │ available/soon/unavailable│ الافتراضي:    │
+  │                │          │        │                         │ available     │
+  │ sectionTitle   │ string   │ ❌     │ أي نص                    │ عنوان القسم   │
+  │ notes          │ string   │ ❌     │ أي نص                    │ ملاحظة المعيد │
+  │ materials      │ object   │ ❌     │ انظر تحت                 │ ملفات أساسية  │
+  │ extraFiles[]   │ array    │ ❌     │ ملفات إضافية              │ ملفات إضافية  │
+  │ task           │ object   │ ❌     │ انظر تحت                 │ ملف المهمة    │
+  └────────────────┴──────────┴────────┴─────────────────────────┴───────────────┘
+
+  * واحد منهم على الأقل مطلوب.
+
+
+🎯 ج) حقول materials (اختيارية كلها):
+
+  ┌─────────────┬─────────────────┬──────────────────────────────────────┐
+  │ المفتاح     │ النوع           │ مثال                                  │
+  ├─────────────┼─────────────────┼──────────────────────────────────────┤
+  │ file        │ string أو object│ "files/x.pdf" أو {label, url, type}  │
+  │ exercises   │ string أو object│ نفس الشكل                             │
+  │ solution    │ string أو object│ نفس الشكل                             │
+  │ recording   │ url             │ رابط فيديو (لازم https)              │
+  │ extraLinks[]│ array           │ [{label, url}]                       │
+  └─────────────┴─────────────────┴──────────────────────────────────────┘
+
+
+🎯 د) حقول task:
+
+  task: {
+    title:   "واجب الأسبوع الرابع",        ← ★ عنوان المهمة
+    url:     "files/task.pdf",            ← ★ رابط الملف
+    dueDate: "2026-05-15",                ← ★ تاريخ التسليم (YYYY-MM-DD)
+    notes:   "سلّم قبل الساعة 11 مساءً."   ← ملاحظات
+  }
+
+
+🎯 هـ) أنواع الأسئلة:
+
+  MCQ (اختيار من متعدد):
+    {
+      q: "السؤال؟",                          ← ★ إجباري
+      options: ["أ", "ب", "ج", "د"],         ← ★ إجباري (2 على الأقل)
+      correct: 1,                             ← ★ index الإجابة (يبدأ من 0)
+      translation: "...",                    ← اختياري
+      explanation: "..."                     ← اختياري
+    }
+
+  مقالي (Essay):
+    {
+      type: "essay",                          ← ★ إجباري
+      q: "السؤال؟",                          ← ★ إجباري
+      answer: "الإجابة النموذجية...",          ← ★ إجباري
+      tags: ["tag1", "tag2"],                ← اختياري
+      ref: "المحاضرة 4 — Section 3.5"        ← اختياري
+    }
+
+
+🎯 و) أنواع الروابط:
+
+  رابط بسيط:
+    { t: "الاسم", d: "الوصف", url: "https://..." }
+
+  رابط مع أزرار متعددة:
+    {
+      t: "الاسم",
+      d: "الوصف",
+      icon: "🔗",
+      actions: [
+        { label: "مشاهدة", url: "https://...", type: "view",     color: "blue" },
+        { label: "تحميل",  url: "https://...", type: "download", color: "green" }
+      ]
+    }
+
+  الألوان المتاحة: green, orange, red, blue
+  الأنواع: view, download
+
+
+═══════════════════════════════════════════════════════════════════════
+5) أخطاء شائعة وكيفية تجنبها
+═══════════════════════════════════════════════════════════════════════
+
+❌ خطأ 1: نسيان الفاصلة
+   lectures: [
+     { /* محاضرة 1 */ }     ← مفيش فاصلة
+     { /* محاضرة 2 */ }     ← ❌ هيكسر
+   ]
+   الحل: فاصلة (,) بعد كل عنصر ما عدا الأخير.
+
+❌ خطأ 2: تكرار id
+   { id: "net-lecture-04", t: "..." }
+   { id: "net-lecture-04", t: "..." }   // ❌ نفس الـ ID
+   الحل: كل id فريد.
+
+❌ خطأ 3: عدم تطابق lectureId
+   ملف المحاضرة: { id: "net-lecture-04" }
+   ملف السكشن:   { "lectureId": "net-lecture-05" }   // ❌ مش هيظهر
+   الحل: اتأكد lectureId = id المحاضرة بالظبط.
+
+❌ خطأ 4: subject غير متطابق
+   subjects-index.js: { slug: "computer-networks" }
+   sections.json:     { "subject": "computer-network" }  // ❌
+   الحل: انسخ slug من subjects-index.js حرفيًا.
+
+❌ خطأ 5: المعيد نفسه بـ IDs مختلفة
+   { "instructorId": "inst-ahmed" }
+   { "instructorId": "ahmed-1" }    // ❌ هيظهر كشخصين
+   الحل: نفس المعيد = نفس instructorId دائمًا.
+
+❌ خطأ 6: instructorId متطابق لمعيدين مختلفين
+   { "instructorId": "inst-001", "instructorName": "م. أحمد" }
+   { "instructorId": "inst-001", "instructorName": "م. سارة" }  // ❌
+   الحل: كل معيد = instructorId خاص به.
+
+❌ خطأ 7: JSON غير صالح
+   { "sections": [ { "id": "x", } ] }   // ❌ فاصلة قبل }
+   الحل: استخدم JSONLint للتأكد.
+
+❌ خطأ 8: أسئلة بدون correct
+   { q: "السؤال؟", options: ["أ", "ب"] }   // ❌ نسيت correct
+   الحل: MCQ لازم correct: <index>.
+
+❌ خطأ 9: correct أكبر من عدد options
+   { options: ["أ", "ب"], correct: 5 }   // ❌ index 5 مش موجود
+   الحل: correct بين 0 و options.length - 1.
+
+❌ خطأ 10: روابط بـ http:// بدل https://
+   { "recording": "http://example.com/video" }   // ❌
+   الحل: كل الروابط الخارجية لازم https://.
+
+
+═══════════════════════════════════════════════════════════════════════
+6) قوالب جاهزة للنسخ
+═══════════════════════════════════════════════════════════════════════
+
+📋 قالب محاضرة فارغ:
+
+  {
+    id: "SUBJ-lecture-NN",
+    t: "المحاضرة [رقم] — [العنوان]",
+    d: "[وصف مختصر]",
+    pdf: "files/[filename].pdf",
+    pdf2: "files/[filename]-questions.pdf",
+    sectionTitle: "🧩 سكاشن [المحاضرة]",
+
+    links: [
+      { t: "🎥 تسجيل الفيديو", url: "https://..." },
+      { t: "📑 السلايدات",     url: "https://..." }
+    ],
+
+    linkCategories: [
+      {
+        category: "[فئة]",
+        icon: "[emoji]",
+        description: "[وصف]",
+        links: [
+          {
+            t: "[اسم الرابط]",
+            d: "[وصف]",
+            actions: [
+              { label: "📖 فتح", url: "https://...", type: "view", color: "blue" }
+            ]
+          }
+        ]
+      }
+    ],
+
+    questions: [
+      {
+        q: "[سؤال MCQ]",
+        options: ["أ", "ب", "ج", "د"],
+        correct: 0,
+        translation: "[English]",
+        explanation: "[الشرح]"
+      },
+      {
+        type: "essay",
+        q: "[سؤال مقالي]",
+        answer: "[الإجابة النموذجية]",
+        tags: ["tag1", "tag2"],
+        ref: "[المرجع]"
+      }
+    ],
+
+    notes: "[ملاحظات وتكاليف]",
+    summary: {
+      pdf:  "files/[summary].pdf",
+      text: "[ملخص نصي]"
+    }
+  }
+
+
+📋 قالب سكشن فارغ:
+
+  {
+    "id": "SUBJ-sec-NN",
+    "subject": "SUBJECT-SLUG",
+    "lectureId": "SUBJ-lecture-NN",
+    "lecture": "[نفس عنوان المحاضرة]",
+
+    "instructorId": "inst-XXX",
+    "instructorName": "م./د. [الاسم]",
+    "groupName": "سكشن [A/B/...]",
+    "status": "available",
+
+    "sectionTitle": "🧩 سكاشن [المحاضرة]",
+
+    "notes": "[ملاحظات المعيد]",
+
+    "materials": {
+      "file":      { "label": "ملف السكشن",    "url": "files/[file].pdf",     "type": "pdf" },
+      "exercises": { "label": "تمارين",         "url": "files/[exercises].pdf", "type": "pdf" },
+      "solution":  { "label": "الحل النموذجي",  "url": "files/[solution].pdf",  "type": "pdf" },
+      "recording": "https://...",
+      "extraLinks": [
+        { "label": "[اسم الرابط]", "url": "https://..." }
+      ]
+    },
+
+    "extraFiles": [
+      { "label": "[ملف إضافي 1]", "url": "files/[file].pdf", "type": "pdf" },
+      { "label": "[فيديو إضافي]",  "url": "https://...",       "type": "video" }
+    ],
+
+    "task": {
+      "title": "[عنوان الواجب]",
+      "url": "files/[task].pdf",
+      "dueDate": "YYYY-MM-DD",
+      "notes": "[تعليمات التسليم]"
+    }
+  }
+
+
+📋 جدول اختصارات النسخ (Copy-Paste):
+
+  ┌─────────────────┬──────────────────────────────────┐
+  │ القيمة          │ الانسخ هذا                       │
+  ├─────────────────┼──────────────────────────────────┤
+  │ معيد 1          │ inst-ahmed — م. أحمد سمير         │
+  │ معيد 2          │ inst-sara — م. سارة محمود         │
+  │ معيد 3          │ inst-mohamed — م. محمد علي        │
+  │ حالة "متاح"     │ "available"                       │
+  │ حالة "قريبًا"   │ "soon"                            │
+  │ حالة "غير متاح" │ "unavailable"                     │
+  │ نوع "مشاهدة"    │ "view"                            │
+  │ نوع "تحميل"     │ "download"                        │
+  │ لون "أزرق"      │ "blue"                            │
+  │ لون "أخضر"      │ "green"                           │
+  │ لون "برتقالي"   │ "orange"                          │
+  │ لون "أحمر"      │ "red"                             │
+  │ نوع سؤال مقالي  │ "essay"                           │
+  └─────────────────┴──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════
+7) اختبار بعد الإضافة
+═══════════════════════════════════════════════════════════════════════
+
+✅ قائمة فحص سريعة:
+
+  1. افتح الصفحة في المتصفح → F12 → Console
+  2. اتأكد مفيش أخطاء JS
+  3. روح للمادة → اتأكد المحاضرة الجديدة ظاهرة
+  4. اضغط عليها → اتأكد:
+     [ ] العنوان ظهر صح
+     [ ] عدد الأسئلة = العدد اللي أضفته
+     [ ] الروابط شغالة
+  5. افتح قسم السكشن → اتأكد:
+     [ ] لو معيد واحد → دخل مباشرةً
+     [ ] لو أكثر → ظهرت القائمة
+     [ ] لو نفس المعيد بأكثر من سكشن → ظهر المنتقي
+  6. افتح سكشن → اتأكد:
+     [ ] الملفات الأساسية ظاهرة
+     [ ] extraFiles ظاهرة تحت "📎 ملفات إضافية"
+     [ ] task ظاهر تحت "📌 ملف المهمة"
+
+
+🐛 حل المشاكل الشائعة:
+
+  ┌──────────────────────────┬─────────────────────┬───────────────────────┐
+  │ المشكلة                  │ السبب المحتمل       │ الحل                  │
+  ├──────────────────────────┼─────────────────────┼───────────────────────┤
+  │ المحاضرة مش ظاهرة        │ خطأ في JS           │ افتح Console          │
+  │ السكشن مش بيظهر          │ lectureId غلط       │ تطابق مع id المحاضرة  │
+  │ السكشن مش بيظهر          │ subject غلط         │ تطابق مع slug المادة  │
+  │ قسم السكشن مش ظاهر       │ ملف السكاشن مش موجود │ أنشئ sections-{slug}  │
+  │ الأسئلة مش ظاهرة         │ مفيش questions[]    │ أضف الأسئلة           │
+  │ المعيد ظاهر مرتين         │ instructorId مختلف   │ وحّد الـ ID           │
+  │ خطأ في JSON              │ فاصلة زائدة/ناقصة    │ استخدم JSONLint       │
+  └──────────────────────────┴─────────────────────┴───────────────────────┘
+
+
+🔧 أدوات مساعدة:
+  - JSONLint (https://jsonlint.com) — للتأكد إن JSON صالح
+  - JSFiddle (https://jsfiddle.net) — لتجربة كود JS سريع
+  - Chrome DevTools → Console — لكشف أخطاء JS
+
+
+═══════════════════════════════════════════════════════════════════════
+🎁 ملحق: قائمة الـ emojis الموصى بها
+═══════════════════════════════════════════════════════════════════════
+
+  محاضرة       🎓       سكشن           🧩
+  فيديو        🎥       ملف PDF         📄
+  تمارين       📝       حل             ✅
+  ملخص         📝       مهمة/واجب       📌
+  ملفات إضافية  📎       رابط            🔗
+  عربي         🇪🇬       عالمي           🌍
+  مرجع         📚       أداة            🔧
+  شهادة        🎓       ميدتيرم         📝
+  فاينل        🎓       بنك أسئلة       🏦
+
+
+═══════════════════════════════════════════════════════════════════════
+📞 ملاحظة أخيرة
+═══════════════════════════════════════════════════════════════════════
+
+  • كل مرة تضيف محاضرة أو سكشن → خد نسخة احتياطية الأول.
+  • جرب محليًا في المتصفح قبل ما ترفع.
+  • اتبع نفس النمط الموجود في الأمثلة — متخترعش تنسيقات جديدة.
+  • لو حصلت مشكلة → افتح Console وابعت الخطأ.
+
+  بالتوفيق! 🚀
+═══════════════════════════════════════════════════════════════════════
+╔══════════════════════════════════════════════════════════════════╗
+║  📁 الجزء 2: data/subjects-index.js                              ║
+╚══════════════════════════════════════════════════════════════════╝
+// ═══════════════════════════════════════════════════════════════════
+//  فهرس المواد — subjects-index.js
+//  ★ هذا الملف يحمّل أولاً في indexV5.html
+//  ★ كل مادة لها ملف منفصل + ملف سكاشن منفصل
+// ═══════════════════════════════════════════════════════════════════
+
+var SUBJECTS_INDEX = [
+
+  // ─────────────────────────────────────────────────────────────
+  // 1) Computer Networks
+  // ─────────────────────────────────────────────────────────────
+  {
+    slug:         "computer-networks",
+    name:         "Computer Networks",
+    en:           "Computer Networks",
+    icon:         "🌐",
+    file:         "data/computer-networks.js",
+    sectionsFile: "data/sections-computer-networks.json",
+    sectionTitle: "🧩 سكاشن الشبكات",
+    active:       true
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // 2) مادة تجريبية
+  // ─────────────────────────────────────────────────────────────
+  {
+    slug:   "sample",
+    name:   "مادة تجريبية",
+    en:     "Sample",
+    icon:   "🧪",
+    file:   "data/sample.js",
+    active: true
+    // مفيش sectionsFile → هيستخدم sections-sample.json تلقائيًا
+  }
+
+];
+╔══════════════════════════════════════════════════════════════════╗
+║  📁 الجزء 3: data/computer-networks.js                           ║
+╚══════════════════════════════════════════════════════════════════╝
+// ═══════════════════════════════════════════════════════════════════
+//  مادة: Computer Networks
+//  المرجع: Kurose & Ross — Top-Down Approach
+//  نسخة نظيفة — 1-2 أسئلة لكل محاضرة
+// ═══════════════════════════════════════════════════════════════════
+
+subjects.push({
+  name: "Computer Networks",
+  en: "Computer Networks",
+  icon: "🌐",
+
+  // ═══════════════════════════════════════════════════════════════════
+  // المحاضرات
+  // ═══════════════════════════════════════════════════════════════════
+  lectures: [
+
+    // ───────────────────────────── المحاضرة 1 ─────────────────────────
+    {
+      id: "net-lecture-01",
+      t: "المحاضرة الأولى — مقدمة في شبكات الحاسوب",
+      d: "What is the Internet, Nuts-and-Bolts, Services, Protocols, Access Networks",
+      pdf: "files/net-1.pdf",
+      pdf2: "files/net-1-questions.pdf",
+      sectionTitle: "🧩 سكاشن مقدمة الشبكات",
+
+      links: [
+        { t: "🎥 تسجيل فيديو المحاضرة", d: "المحاضرة كاملة — 45 دقيقة", url: "https://example.com/net-1-video" },
+        { t: "📑 سلايدات المحاضرة", d: "PDF الشرائح الرسمية", url: "https://example.com/net-1-slides" }
+      ],
+
+      linkCategories: [
+        {
+          category: "فيديوهات عربية",
+          icon: "🇪🇬",
+          description: "شروحات بالعربية لمفاهيم الشبكات",
+          links: [
+            {
+              t: "د. خولة الهراشجة — شبكات الحاسوب (Ch1)",
+              d: "تغطية شاملة: Nuts-and-Bolts, Protocols, DSL/Cable/FTTH",
+              icon: "🇪🇬",
+              actions: [
+                { label: "📖 الشرح", url: "https://www.youtube.com/playlist?list=PL8v_bZALWLKE9Lo2BIy8nsdsakbSvQlEo", type: "view", color: "red" }
+              ]
+            }
+          ]
+        },
+        {
+          category: "مراجع عالمية",
+          icon: "🌍",
+          description: "شروحات أكاديمية موثوقة",
+          links: [
+            {
+              t: "Jim Kurose — Chapter 1 (Official)",
+              d: "الشرح الرسمي من مؤلف الكتاب",
+              icon: "🌍",
+              actions: [
+                { label: "📖 الشرح", url: "https://www.youtube.com/playlist?list=PL1ya5dD_M8uX-BLUF1FEvUNsYWQL5_l0O", type: "view", color: "red" }
+              ]
+            }
+          ]
+        },
+        {
+          category: "أدوات ومحاكاة",
+          icon: "🔧",
+          description: "برامج تفاعلية للتطبيق",
+          links: [
+            {
+              t: "Kurose & Ross Interactive Animations",
+              d: "محاكاة رسمية للـ Packets و Queue Buffers",
+              icon: "🔧",
+              actions: [
+                { label: "🚀 فتح", url: "https://gaia.cs.umass.edu/kurose_ross/interactive/", type: "view", color: "orange" }
+              ]
+            }
+          ]
+        }
+      ],
+
+      questions: [
+        {
+          q: "ما هو المقصود بالـ Protocol في شبكات الحاسوب؟",
+          options: [
+            "جهاز يربط الشبكات",
+            "مجموعة قواعد تحكم عملية الاتصال بين الأجهزة",
+            "برنامج لتصفح الإنترنت",
+            "نوع من الكابلات"
+          ],
+          correct: 1,
+          translation: "What is a Protocol in computer networks?",
+          explanation: "الـ Protocol = قواعد متفق عليها بين الأجهزة: الصيغة (Syntax)، المعنى (Semantics)، والتوقيت (Timing)."
+        },
+        {
+          type: "essay",
+          q: "اشرح الفرق بين Nuts-and-Bolts Description و Services Description للإنترنت.",
+          answer:
+            "Nuts-and-Bolts:\n" +
+            "• وصف مادي — مليارات الأجهزة المتصلة (End Systems, Routers, Switches).\n" +
+            "• يركّز على المكونات ووسائط النقل.\n\n" +
+            "Services:\n" +
+            "• وصف وظيفي — البنية التحتية اللي بتقدّم خدمات للتطبيقات.\n" +
+            "• Web, Email, Streaming, VoIP.",
+          tags: ["Introduction", "Nuts-and-Bolts", "Services"],
+          ref: "المحاضرة 1 — Section 1.1"
+        }
+      ]
+    },
+
+    // ───────────────────────────── المحاضرة 2 ─────────────────────────
+    {
+      id: "net-lecture-02",
+      t: "المحاضرة الثانية — Network Edge & Core",
+      d: "Hosts, Access Networks, Physical Media, Packet vs Circuit Switching",
+      pdf: "files/net-2.pdf",
+
+      links: [
+        { t: "🎥 تسجيل الفيديو", url: "https://example.com/net-2-video" },
+        { t: "📑 السلايدات", url: "https://example.com/net-2-slides" }
+      ],
+
+      questions: [
+        {
+          q: "الـ Queue Delay بيحدث فين؟",
+          options: [
+            "في الكابل نفسه",
+            "في طوابير الانتظار جوه الراوتر",
+            "في المعالج",
+            "في الـ End System فقط"
+          ],
+          correct: 1
+        },
+        {
+          type: "essay",
+          q: "اشرح مكونات الـ Packet Delay الأربعة.",
+          answer:
+            "1) Processing Delay — فحص الـ Header وتحديد المسار.\n" +
+            "2) Queuing Delay — انتظار الـ Packet في الطابور.\n" +
+            "3) Transmission Delay — دفع البتات للكابل = L/R.\n" +
+            "4) Propagation Delay — انتشار الإشارة عبر الوسيط = d/s.",
+          tags: ["Delay", "Packet Switching", "Performance"],
+          ref: "المحاضرة 2 — Section 1.4"
+        }
+      ]
+    },
+
+    // ───────────────────────────── المحاضرة 3 ─────────────────────────
+    {
+      id: "net-lecture-03",
+      t: "المحاضرة الثالثة — Application Layer",
+      d: "HTTP, FTP, SMTP, DNS, P2P Applications",
+      pdf: "files/net-3.pdf",
+
+      links: [
+        { t: "🎥 تسجيل الفيديو", url: "https://example.com/net-3-video" },
+        { t: "📑 السلايدات", url: "https://example.com/net-3-slides" }
+      ],
+
+      questions: [
+        {
+          q: "بروتوكول HTTP يعمل على أي طبقة؟",
+          options: ["Application", "Transport", "Network", "Data Link"],
+          correct: 0
+        },
+        {
+          q: "ما الفرق بين HTTP و HTTPS؟",
+          options: [
+            "HTTPS بيستخدم تشفير SSL/TLS",
+            "HTTP أسرع",
+            "مفيش فرق",
+            "HTTPS للفيديو فقط"
+          ],
+          correct: 0
+        }
+      ]
+    }
+
+  ],
+
+  // ═══════════════════════════════════════════════════════════════════
+  // الميدتيرمز — مقسّمة بفئات
+  // ═══════════════════════════════════════════════════════════════════
+  midtermsCategories: [
+    {
+      category: "امتحانات د. أحمد سمير",
+      icon: "👨‍🏫",
+      description: "ميدتيرمات المادة على يد د. أحمد",
+      items: [
+        {
+          t: "ميدتيرم 2023",
+          d: "أسئلة المحاضرتين الأولى والثانية",
+          pdf: "files/mid-ahmed-2023.pdf",
+          lectures: [0, 1]
+        }
+      ]
+    },
+    {
+      category: "امتحانات د. سارة محمد",
+      icon: "👩‍🏫",
+      description: "ميدتيرمات المادة على يد د. سارة",
+      items: [
+        {
+          t: "ميدتيرم 2023 — د. سارة",
+          d: "نسخة بديلة للتدريب",
+          pdf: "files/mid-sara-2023.pdf",
+          questions: [
+            {
+              q: "أي من التالي يُعتبر Access Network؟",
+              options: ["DSL", "Router", "Switch", "Firewall"],
+              correct: 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  // ═══════════════════════════════════════════════════════════════════
+  // الفاينلات — مقسّمة بالسنة
+  // ═══════════════════════════════════════════════════════════════════
+  finalsCategories: [
+    {
+      category: "سنة 2023",
+      icon: "📅",
+      items: [
+        {
+          t: "فاينل 2023",
+          d: "أسئلة شاملة على كل المحاضرات",
+          pdf: "files/final-2023.pdf",
+          lectures: [0, 1, 2]
+        }
+      ]
+    },
+    {
+      category: "سنة 2022",
+      icon: "📅",
+      items: [
+        {
+          t: "فاينل 2022",
+          d: "أسئلة شاملة للتدريب",
+          pdf: "files/final-2022.pdf",
+          questions: [
+            {
+              type: "essay",
+              q: "اشرح الفرق بين TCP و UDP مع ذكر استخدامات كل منهما.",
+              answer:
+                "TCP: موثوق ومنظم — ويب/بريد/نقل ملفات.\n" +
+                "UDP: غير موثوق لكن أسرع — Streaming/ألعاب/DNS/VoIP.",
+              tags: ["TCP", "UDP", "Transport Layer"],
+              ref: "المحاضرة 3 — Section 3.5"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  // ═══════════════════════════════════════════════════════════════════
+  // بنوك الأسئلة
+  // ═══════════════════════════════════════════════════════════════════
+  testBanks: [
+    {
+      t: "Test Bank — كل المحاضرات",
+      d: "بنك أسئلة شامل للفاينل",
+      pdf: "files/test-bank-final.pdf",
+      questions: [
+        { q: "كم عدد طبقات OSI Model؟", options: ["5", "6", "7", "8"], correct: 2 },
+        { q: "IPv4 Address بيتكون من كام بت؟", options: ["32", "48", "64", "128"], correct: 0 },
+        { q: "بروتوكول DHCP بيستخدم لـ...", options: ["توزيع IP تلقائياً", "ترجمة الأسماء", "التشفير", "التوجيه"], correct: 0 }
+      ]
+    },
+    {
+      t: "بنك أسئلة Chapter 1",
+      d: "كل أسئلة الفصل الأول",
+      lectures: [0, 1]
+    }
+  ],
+
+  // ═══════════════════════════════════════════════════════════════════
+  // روابط ومصادر عامة
+  // ═══════════════════════════════════════════════════════════════════
+  linkCategories: [
+    {
+      category: "مراجع وكتب أساسية",
+      icon: "📚",
+      description: "مراجع أكاديمية معتمدة",
+      links: [
+        {
+          t: "Kurose & Ross — Computer Networking",
+          d: "المرجع الأساسي — Top-Down Approach",
+          actions: [
+            { label: "الموقع الرسمي", url: "https://gaia.cs.umass.edu/kurose_ross/", type: "view", color: "blue" },
+            { label: "تحميل", url: "https://example.com/kurose.pdf", type: "download", color: "green" }
+          ]
+        },
+        {
+          t: "Tanenbaum — Computer Networks",
+          d: "مرجع كلاسيكي شامل",
+          url: "https://example.com/tanenbaum"
+        }
+      ]
+    },
+    {
+      category: "أدوات ومحاكاة",
+      icon: "🔧",
+      description: "برامج لتطبيق الشبكات عمليًا",
+      links: [
+        {
+          t: "Cisco Packet Tracer",
+          d: "محاكاة شبكات كاملة",
+          actions: [
+            { label: "فتح / تحميل", url: "https://www.netacad.com/courses/packet-tracer", type: "view", color: "orange" }
+          ]
+        },
+        {
+          t: "Wireshark",
+          d: "تحليل الـ Packets",
+          actions: [
+            { label: "تحميل", url: "https://www.wireshark.org/", type: "download", color: "blue" }
+          ]
+        }
+      ]
+    }
+  ]
+});
+╔══════════════════════════════════════════════════════════════════╗
+║  📁 الجزء 4: data/sections-computer-networks.json                ║
+╚══════════════════════════════════════════════════════════════════╝
+{
+  "schemaVersion": 2,
+  "subject": "computer-networks",
+  "sections": [
+
+    {
+      "id": "net-sec-01",
+      "subject": "computer-networks",
+      "lectureId": "net-lecture-01",
+      "lecture": "المحاضرة الأولى — مقدمة في شبكات الحاسوب",
+
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن A",
+      "status": "available",
+
+      "sectionTitle": "🧩 سكاشن مقدمة الشبكات",
+
+      "notes": "الحضور إجباري — في تمارين عملية على Wireshark.",
+
+      "materials": {
+        "file":      { "label": "ملف السكشن",    "url": "files/net-sec-01.pdf", "type": "pdf" },
+        "exercises": { "label": "تمارين",         "url": "files/net-sec-01-ex.pdf", "type": "pdf" },
+        "solution":  { "label": "الحل النموذجي",  "url": "files/net-sec-01-sol.pdf", "type": "pdf" },
+        "recording": "https://example.com/net-sec-01-record",
+        "extraLinks": [
+          { "label": "مراجعة سريعة على YouTube", "url": "https://example.com/net-sec-01-review" }
+        ]
+      },
+
+      "extraFiles": [
+        { "label": "ملف تمارين إضافي", "url": "files/net-sec-01-extra.pdf", "type": "pdf" },
+        { "label": "شرح إضافي — Network Edge", "url": "https://example.com/net-sec-01-extra-video", "type": "video" }
+      ],
+
+      "task": {
+        "title": "واجب الأسبوع الثاني",
+        "url": "files/net-sec-01-task.pdf",
+        "dueDate": "2026-05-01",
+        "notes": "سلّم قبل الساعة 11 مساءً — الإجابة عبر Google Form."
+      }
+    },
+
+    {
+      "id": "net-sec-02",
+      "subject": "computer-networks",
+      "lectureId": "net-lecture-01",
+      "lecture": "المحاضرة الأولى — مقدمة في شبكات الحاسوب",
+
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن B",
+      "status": "available",
+
+      "notes": "نفس محتوى سكشن A لكن يوم مختلف.",
+
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "files/net-sec-02.pdf", "type": "pdf" },
+        "exercises": { "label": "تمارين",      "url": "files/net-sec-02-ex.pdf", "type": "pdf" },
+        "recording": "https://example.com/net-sec-02-record"
+      }
+    },
+
+    {
+      "id": "net-sec-03",
+      "subject": "computer-networks",
+      "lectureId": "net-lecture-01",
+      "lecture": "المحاضرة الأولى — مقدمة في شبكات الحاسوب",
+
+      "instructorId": "inst-sara",
+      "instructorName": "م. سارة محمود",
+      "groupName": "سكشن C",
+      "status": "soon",
+
+      "notes": "لسه هتبدأ الأسبوع القادم.",
+
+      "materials": {}
+    },
+
+    {
+      "id": "net-sec-04",
+      "subject": "computer-networks",
+      "lectureId": "net-lecture-02",
+      "lecture": "المحاضرة الثانية — Network Edge & Core",
+
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن A",
+      "status": "available",
+
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "files/net-sec-04.pdf", "type": "pdf" },
+        "recording": "https://example.com/net-sec-04-record"
+      },
+
+      "task": {
+        "title": "تمرين Delay Calculations",
+        "url": "files/net-sec-04-task.pdf",
+        "dueDate": "2026-05-08",
+        "notes": "طبّق المعادلات الأربعة على سيناريوهات مختلفة."
+      }
+    }
+
+  ]
+}
+╔══════════════════════════════════════════════════════════════════╗
+║  📁 الجزء 5: data/sample.js                                      ║
+╚══════════════════════════════════════════════════════════════════╝
+// مادة تجريبية — لمعاينة الشكل فقط (امسحيها بعد المعاينة)
+subjects.push({
+  name: 'مادة تجريبية',
+  en: 'Sample',
+  icon: '🧪',
+
+  lectures: [
+    {
+      id: 'sample-lecture-01',
+      t: 'المحاضرة الأولى — تجريبية',
+      d: 'وصف قصير للمحاضرة',
+      pdf: 'Software Engineering/lectures/Software Engineering Chapter 1 Lecture 1.pdf',
+      sectionTitle: '🧩 سكاشن المادة التجريبية',
+
+      links: [
+        { t: '🎥 تسجيل فيديو المحاضرة', d: 'مشاهدة التسجيل كاملاً', url: 'https://example.com/video' }
+      ],
+
+      questions: [
+        {
+          q: 'سؤال تجريبي رقم 1؟',
+          options: ['الإجابة أ', 'الإجابة ب', 'الإجابة ج', 'الإجابة د'],
+          correct: 1,
+          translation: 'Sample question number 1?',
+          explanation: 'شرح تجريبي: الإجابة ب هي الصحيحة لأن ...'
+        },
+        {
+          q: 'سؤال تجريبي رقم 2؟',
+          options: ['صح', 'خطأ'],
+          correct: 0
+        }
+      ],
+
+      summary: { text: 'ملخص تجريبي قصير للمحاضرة.' }
+    }
+  ],
+
+  testBanks: [
+    { t: 'بنك أسئلة المادة', d: 'أسئلة المحاضرة في اختبار واحد', lectures: [0] }
+  ]
+});
+╔══════════════════════════════════════════════════════════════════╗
+║  📁 الجزء 6: data/sections-sample.json                           ║
+╚══════════════════════════════════════════════════════════════════╝
+{
+  "schemaVersion": 2,
+  "subject": "sample",
+  "sections": [
+
+    {
+      "id": "sample-sec-01",
+      "subject": "sample",
+      "lectureId": "sample-lecture-01",
+      "lecture": "المحاضرة الأولى — تجريبية",
+
+      "instructorId": "sample-inst-1",
+      "instructorName": "م. معيد تجريبي",
+      "groupName": "مجموعة 1",
+      "status": "available",
+
+      "sectionTitle": "🧩 سكاشن المادة التجريبية",
+
+      "notes": "ملاحظة تجريبية من المعيد.",
+
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "Visual Programming/lectures/Chapter 1.pdf", "type": "pdf" },
+        "exercises": { "label": "تمارين", "url": "Computer Graphics/lectures/Lec1-Computer Graphics.pdf", "type": "pdf" },
+        "solution":  { "label": "حل نموذجي", "url": "Computer Networks/Questions/Questions on each lecture/Chapter 1 - Questions - Computer Networks.pdf", "type": "pdf" },
+        "recording": "https://example.com/recording",
+        "extraLinks": [
+          { "label": "رابط إضافي", "url": "https://example.com/extra" }
+        ]
+      },
+
+      "extraFiles": [
+        { "label": "ملف تمارين إضافي", "url": "https://example.com/extra-ex.pdf", "type": "pdf" }
+      ],
+
+      "task": {
+        "title": "واجب تجريبي",
+        "url": "https://example.com/task.pdf",
+        "dueDate": "2026-05-15",
+        "notes": "سلّم قبل الساعة 11 مساءً."
+      }
+    },
+
+    {
+      "id": "sample-sec-02",
+      "subject": "sample",
+      "lectureId": "sample-lecture-01",
+      "lecture": "المحاضرة الأولى — تجريبية",
+
+      "instructorId": "sample-inst-1",
+      "instructorName": "م. معيد تجريبي",
+      "groupName": "مجموعة 2",
+      "status": "available",
+
+      "materials": {
+        "file": "Visual Programming/lectures/Chapter 1.pdf"
+      }
+    }
+
+  ]
+}
+╔══════════════════════════════════════════════════════════════════╗
+║  📁 الجزء 7: قوالب فارغة للنسخ السريع                         ║
+╚══════════════════════════════════════════════════════════════════╝
+═══════════════════════════════════════════════════════════════════════
+📋 قالب محاضرة فارغ — انسخه والصقه في ملف المادة
+═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// المحاضرة [رقم] — [العنوان]
+// ═══════════════════════════════════════════════════
+{
+  id: "SUBJ-lecture-NN",
+  t: "المحاضرة [رقم] — [العنوان]",
+  d: "[وصف مختصر]",
+  pdf: "files/[filename].pdf",
+  pdf2: "files/[filename]-questions.pdf",
+  sectionTitle: "🧩 سكاشن [المحاضرة]",
+
+  links: [
+    { t: "🎥 تسجيل الفيديو", url: "https://..." },
+    { t: "📑 السلايدات",     url: "https://..." }
+  ],
+
+  linkCategories: [
+    {
+      category: "[فئة]",
+      icon: "[emoji]",
+      description: "[وصف]",
+      links: [
+        {
+          t: "[اسم الرابط]",
+          d: "[وصف]",
+          actions: [
+            { label: "📖 فتح", url: "https://...", type: "view", color: "blue" }
+          ]
+        }
+      ]
+    }
+  ],
+
+  questions: [
+    {
+      q: "[سؤال MCQ]",
+      options: ["أ", "ب", "ج", "د"],
+      correct: 0,
+      translation: "[English]",
+      explanation: "[الشرح]"
+    },
+    {
+      type: "essay",
+      q: "[سؤال مقالي]",
+      answer: "[الإجابة النموذجية]",
+      tags: ["tag1", "tag2"],
+      ref: "[المرجع]"
+    }
+  ],
+
+  notes: "[ملاحظات وتكاليف]",
+
+  summary: {
+    pdf:  "files/[summary].pdf",
+    text: "[ملخص نصي]"
+  }
+}
+═══════════════════════════════════════════════════════════════════════
+📋 قالب سكشن فارغ — انسخه والصقه في sections-{slug}.json
+═══════════════════════════════════════════════════════════════════════
+{
+  "id": "SUBJ-sec-NN",
+  "subject": "SUBJECT-SLUG",
+  "lectureId": "SUBJ-lecture-NN",
+  "lecture": "[نفس عنوان المحاضرة]",
+
+  "instructorId": "inst-XXX",
+  "instructorName": "م./د. [الاسم]",
+  "groupName": "سكشن [A/B/...]",
+  "status": "available",
+
+  "sectionTitle": "🧩 سكاشن [المحاضرة]",
+
+  "notes": "[ملاحظات المعيد]",
+
+  "materials": {
+    "file":      { "label": "ملف السكشن",    "url": "files/[file].pdf",     "type": "pdf" },
+    "exercises": { "label": "تمارين",         "url": "files/[exercises].pdf", "type": "pdf" },
+    "solution":  { "label": "الحل النموذجي",  "url": "files/[solution].pdf",  "type": "pdf" },
+    "recording": "https://...",
+    "extraLinks": [
+      { "label": "[اسم الرابط]", "url": "https://..." }
+    ]
+  },
+
+  "extraFiles": [
+    { "label": "[ملف إضافي 1]", "url": "files/[file].pdf", "type": "pdf" },
+    { "label": "[فيديو إضافي]",  "url": "https://...",       "type": "video" }
+  ],
+
+  "task": {
+    "title": "[عنوان الواجب]",
+    "url": "files/[task].pdf",
+    "dueDate": "YYYY-MM-DD",
+    "notes": "[تعليمات التسليم]"
+  }
+}
+═══════════════════════════════════════════════════════════════════════
+📋 جدول الحالات والقيم
+═══════════════════════════════════════════════════════════════════════
+
+┌───────────────────┬──────────────────────────────────────────┐
+│ الحقل             │ القيم الممكنة                            │
+├───────────────────┼──────────────────────────────────────────┤
+│ status (سكشن)     │ "available" / "soon" / "unavailable"     │
+│ type (رابط)       │ "view" / "download"                      │
+│ color (زر)        │ "green" / "orange" / "red" / "blue"      │
+│ type (سؤال)       │ "mcq" (افتراضي) / "essay"                │
+│ correct (MCQ)     │ رقم من 0 إلى options.length - 1          │
+│ contactType       │ "telegram" / "whatsapp" / "email" / "phone" │
+│ dueDate (task)    │ "YYYY-MM-DD"                             │
+└───────────────────┴──────────────────────────────────────────┘
+═══════════════════════════════════════════════════════════════════════
+📁 شجرة الملفات النهائية
+═══════════════════════════════════════════════════════════════════════
+
+  project/
+  ├── indexV5.html                          ← الملف الرئيسي
+  ├── manifest.webmanifest                  ← PWA
+  ├── pwa.js                                ← Service Worker
+  ├── pdf-annotator.html                    ← أداة PDF
+  ├── PROJECT-FILES.txt                     ← هذا الملف
+  ├── TEMPLATE-GUIDE.md                     ← الدليل (اختياري)
+  ├── api/
+  │   └── feedback.js                       ← Serverless function
+  ├── icons/
+  │   ├── icon-192.png
+  │   └── icon-512.png
+  ├── files/                                ← ملفات PDF
+  │   ├── net-1.pdf
+  │   ├── net-2.pdf
+  │   └── ...
+  └── data/
+      ├──computer-networks
+          ├── computer-networks.js              ← ملف المادة
+          └── sections-computer-networks.json   ← ملف السكاشن
+
+      ├── subjects-index.js                 ← فهرس المواد
+      ├── computer-networks.js              ← ملف المادة
+      ├── sections-computer-networks.json   ← ملف السكاشن
+      ├── sample.js
+      └── sections-sample.json
+      ═══════════════════════════════════════════════════════════════════════
+✅ قائمة فحص نهائية قبل النشر
+═══════════════════════════════════════════════════════════════════════
+
+  [ ] subjects-index.js محدّث بكل المواد
+  [ ] كل مادة لها ملف .js في data/
+  [ ] كل مادة لها ملف sections-{slug}.json
+  [ ] كل محاضرة لها id فريد
+  [ ] كل سكشن له id فريد
+  [ ] instructorId موحّد لكل معيد
+  [ ] lectureId يطابق id المحاضرة
+  [ ] subject يطابق slug المادة
+  [ ] كل JSON صالح (اختبره في jsonlint.com)
+  [ ] مفيش أخطاء في Console
+
+  بالتوفيق! 🚀
+═══════════════════════════════════════════════════════════════════════

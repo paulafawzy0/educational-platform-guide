@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "subject": "graphics",
+  "sections": [
+    {
+      "id": "gfx-sec-01",
+      "subject": "graphics",
+      "lectureId": "lecture-01",
+      "lecture": "المحاضرة 1: مقدمة الرسوميات، الإسقاط المنظوري، والـ Rasterization",
+
+      "instructorId": "inst-ahmed",
+      "instructorName": "م. أحمد سمير",
+      "groupName": "سكشن A",
+      "status": "available",
+
+      "sectionTitle": "🧩 سكاشن الرسوميات",
+
+      "notes": "الحضور إجباري — في تمارين على Three.js.",
+
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "files/gfx-sec-01.pdf", "type": "pdf" },
+        "recording": "https://example.com/gfx-sec-01-record"
+      }
+    }
+  ]
+}

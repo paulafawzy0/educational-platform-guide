@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "subject": "sample",
+  "sections": [
+    {
+      "id": "sample-sec-01",
+      "subject": "sample",
+      "lectureId": "sample-lecture-01",
+      "lecture": "المحاضرة الأولى — تجريبية",
+      "instructorId": "sample-inst-1",
+      "instructorName": "م. معيد تجريبي",
+      "groupName": "مجموعة 1",
+      "status": "available",
+      "sectionTitle": "🧩 سكاشن تجريبية",
+      "notes": "ملاحظة تجريبية من المعيد.",
+      "materials": {
+        "file":      { "label": "ملف السكشن", "url": "Visual Programming/lectures/Chapter 1.pdf", "type": "pdf" },
+        "exercises": { "label": "تمارين",      "url": "Computer Graphics/lectures/Lec1-Computer Graphics.pdf", "type": "pdf" },
+        "recording": "https://example.com/recording",
+        "extraLinks": [
+          { "label": "رابط إضافي", "url": "https://example.com/extra" }
+        ]
+      },
+      "extraFiles": [
+        { "label": "ملف تمارين إضافي", "url": "https://example.com/extra-ex.pdf", "type": "pdf" }
+      ],
+      "task": {
+        "title": "واجب تجريبي",
+        "url": "https://example.com/task.pdf",
+        "dueDate": "2026-05-15",
+        "notes": "سلّم قبل الساعة 11 مساءً."
+      }
+    }
+  ]
+}

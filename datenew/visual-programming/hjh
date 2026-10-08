@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "subject": "visual-programming",
+  "sections": [
+    {
+      "id": "vp-sec-01",
+      "subject": "visual-programming",
+      "lecture": "المحاضرة الأولى",
+      "instructorId": "inst-sara",
+      "instructorName": "م. سارة محمود",
+      "groupName": "سكشن A",
+      "status": "available",
+      "sectionTitle": "🧩 سكاشن البرمجة المرئية",
+      "notes": "تطبيق عملي على Windows Forms.",
+      "materials": {
+        "file":      { "label": "ملف السكشن",   "url": "files/vp-sec-01.pdf",     "type": "pdf" },
+        "exercises": { "label": "تمارين",        "url": "files/vp-sec-01-ex.pdf",  "type": "pdf" },
+        "recording": "https://example.com/vp-sec-01-record"
+      }
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "subject": "networks",
+  "sections": [
+    {
+      "id": "net-sec-01",
+      "subject": "networks",
+      "lectureId": "networks-lecture-01",
+      "lecture": "المحاضرة 1: مقدمة في الإنترنت — المكونات، الأطراف، شبكات الوصول، والوسط الناقل",
+      "instructorId": "inst-mohamed",
+      "instructorName": "م. سحر خير",
+      "groupName": "سكشن A",
+      "status": "available",
+      "sectionTitle": "🧩 سكاشن الشبكات",
+      "notes": "الاسبوع الجاي كويز علي شيت واحد",
+      "materials": {
+        "file": {
+          "label": "ملف السكشن",
+          "url": "Computer Networks/Questions/Sheet/Sheet 1 Answers.pdf",
+          "type": "pdf"
+        }
+      }
+    }
+  ]
+}
