@@ -3337,7 +3337,7 @@ var FB_JPEG_QUALITY = 0.75;
 var _recaptchaToken = null;
 var _recaptchaWidgetId = null;
 var _recaptchaState = 'idle';          // idle | loading | ready | failed
-var RECAPTCHA_SITEKEY = '6LftkuItAAAAAHp6tY-un__JW1bWfi7Nh0rQUp-E';
+var RECAPTCHA_SITEKEY = "6LcYTeUtAAAAADSmgazqQHa3v_-Tde3AZfs4RBT9";
 
 window.onRecaptchaOk = function(token){
   _recaptchaToken = token;
