@@ -4368,3 +4368,6 @@ if(document.readyState === 'complete' || (document.readyState === 'interactive' 
     (window.requestIdleCallback || function(f){ setTimeout(f, 300); })(saveBarH);
   }, {once:true});
 })();
+{
+  /* <script defer src="/_vercel/insights/script.js"></script>; */
+}
