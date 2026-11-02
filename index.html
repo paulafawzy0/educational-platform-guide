@@ -85,6 +85,21 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
     })(window, document, "clarity", "script", "z2v353uvbp");
 </script>
 
+<style id="dup-css">
+.dup-flag{display:inline-block;margin:0 0 14px;padding:4px 12px;border-radius:12px;background:var(--warning);color:#fff;font-size:12px;font-weight:700}
+.dup-box{margin:0 0 16px;padding:10px 14px;background:var(--bg-card);border:2px solid var(--border);border-inline-start:5px solid var(--warning);border-radius:12px;color:var(--text-primary)}
+.dup-head{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+.dup-count{font-weight:700;font-size:15px;color:var(--text-heading);line-height:1.6}
+.dup-toggle{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:4px 14px;background:var(--bg-quiz-card);color:var(--accent);border:2px solid var(--border);border-radius:20px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;transition:border-color .2s}
+.dup-toggle:hover{border-color:var(--accent)}
+.dup-toggle:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.dup-arrow{display:inline-block;font-size:14px;line-height:1;transition:transform .25s}
+.dup-box.open .dup-arrow{transform:rotate(180deg)}
+.dup-list{margin:10px 0 2px;padding:0 20px 0 0;font-size:14px;line-height:1.9;color:var(--text-secondary);overflow-wrap:anywhere}
+.dup-list[hidden]{display:none}
+.dup-list li{margin-bottom:2px}
+@media (max-width:640px){.dup-box{padding:10px 12px}.dup-count{font-size:14px}.dup-list{font-size:13px;padding-right:18px}}
+</style>
 </head>
 <body>
 <!-- شاشة اختيار القسم: HTML ثابت عشان الـ LCP يترسم من غير ما يستنى app.js (بتظهر بس لو مفيش قسم محفوظ) -->
@@ -160,11 +175,13 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
                     <button class="sub-tab-button" id="tab-btn-mid" onclick="openSubTab(event, 'sub-mid')">📝 الميدتيرم</button>
                     <button class="sub-tab-button" id="tab-btn-final" onclick="openSubTab(event, 'sub-final')">🎓 الفاينل</button>
                     <button class="sub-tab-button" onclick="openSubTab(event, 'sub-test-bank')">🏦 بنك الأسئلة</button>
+                    <button class="sub-tab-button" id="tab-btn-dupes" style="display:none" onclick="openSubTab(event, 'sub-dupes')">🔁 الأسئلة المكررة</button>
                 </div>
                 <div id="sub-lectures" class="sub-content active"><div id="questions-lectures-list"></div></div>
                 <div id="sub-mid" class="sub-content"><div id="midterms-list"></div></div>
                 <div id="sub-final" class="sub-content"><div id="finals-list"></div></div>
                 <div id="sub-test-bank" class="sub-content"><div id="test-banks-list"></div></div>
+                <div id="sub-dupes" class="sub-content"><div id="dupes-list"></div></div>
                 <div id="sub-links" class="sub-content"><div id="link-categories-list"></div></div>
             </div>
         </div>

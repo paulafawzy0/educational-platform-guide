@@ -3948,3 +3948,242 @@ function __bootDept2() {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
+
+/* =====================================================================
+   🔁 الأسئلة المكررة
+   - خانة "الأسئلة المكررة" جنب بنك الأسئلة (بتظهر بس لو المادة فيها تكرار)
+   - تحت كل سؤال فيها: عدد مرات التكرار (ظاهر دايمًا) + قائمة الأماكن (مطوية افتراضيًا)
+   - في أسئلة المحاضرات/الميد/الفاينل/البنوك المكتوبة بذاتها: علامة "🔁 سؤال مكرر" بس
+   - الاختبارات والبنوك المتجمّعة من أسئلة المحاضرات بتتخطى (مش بتتحسب ومش بتظهر فيها علامة)
+   ===================================================================== */
+(function () {
+  "use strict";
+  var DUP_FLAG = typeof WeakSet === "function" ? new WeakSet() : null;
+  var DUP_CACHE = typeof WeakMap === "function" ? new WeakMap() : null;
+  var DUP_TITLE = "🔁 الأسئلة المكررة";
+  var SOURCES = [
+    { prop: "midterms", icon: "📝" },
+    { prop: "finals", icon: "🎓" },
+    { prop: "testBanks", icon: "🏦" }
+  ];
+
+  // تنضيف النص: تشكيل، همزات، تاء مربوطة، أرقام عربية، علامات ترقيم، مسافات
+  function dupNorm(s) {
+    s = String(s == null ? "" : s).toLowerCase();
+    s = s.replace(/[\u064B-\u065F\u0670\u0640\u06D6-\u06ED\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "");
+    s = s.replace(/[أإآٱ]/g, "ا").replace(/[ىیي]/g, "ي").replace(/ة/g, "ه")
+         .replace(/ؤ/g, "و").replace(/ئ/g, "ي").replace(/ک/g, "ك");
+    s = s.replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x0660); })
+         .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x06F0); });
+    try { s = s.replace(/[^\p{L}\p{N}\s]/gu, " "); }
+    catch (e) { s = s.replace(/[.,;:!?؟،؛"'()\[\]{}<>\-_\/\\|*+=~`@#$%^&]/g, " "); }
+    return s.replace(/\s+/g, " ").trim();
+  }
+
+  function dupSig(q) {
+    if (!q || typeof q !== "object") return "";
+    var t = dupNorm(q.q);
+    if (!t) return "";
+    var opts = Array.isArray(q.options) ? q.options : [];
+    if (!opts.length) return t + "\u0001#essay";
+    return t + "\u0001" + opts.map(dupNorm).sort().join("\u0002");
+  }
+
+  function dupTimes(n) {
+    return n === 2 ? "مرتين" : (n >= 3 && n <= 10 ? n + " مرات" : n + " مرة");
+  }
+
+  // بيحسب المجموعات المكررة للمادة
+  function computeDupes(subj) {
+    var seenObj = DUP_FLAG ? new WeakSet() : null;
+    var map = {}, order = [];
+    function add(q, label, num) {
+      if (!q || typeof q !== "object") return;
+      if (seenObj) { if (seenObj.has(q)) return; seenObj.add(q); } // نفس الكائن بالمرجع = مش تكرار
+      var sig = dupSig(q);
+      if (!sig) return;
+      if (!map[sig]) { map[sig] = []; order.push(sig); }
+      map[sig].push({ q: q, label: label, num: num });
+    }
+    (subj.lectures || []).forEach(function (l, i) {
+      if (!l || !Array.isArray(l.questions)) return;
+      var label = "📚 " + (l.t || "محاضرة " + (i + 1));
+      l.questions.forEach(function (q, j) { add(q, label, j + 1); });
+    });
+    SOURCES.forEach(function (src) {
+      (subj[src.prop] || []).forEach(function (it, i) {
+        // المتجمّع من أسئلة المحاضرات (من غير questions بذاته) بيتخطى
+        if (!it || !Array.isArray(it.questions) || !it.questions.length) return;
+        var label = src.icon + " " + (it.t || "اختبار " + (i + 1));
+        it.questions.forEach(function (q, j) { add(q, label, j + 1); });
+      });
+    });
+    var groups = [];
+    order.forEach(function (sig, idx) {
+      var g = map[sig];
+      if (g.length > 1) groups.push({ list: g, idx: idx });
+    });
+    groups.sort(function (a, b) { return (b.list.length - a.list.length) || (a.idx - b.idx); });
+    var questions = groups.map(function (g) {
+      var copy = {};
+      for (var k in g.list[0].q) if (Object.prototype.hasOwnProperty.call(g.list[0].q, k)) copy[k] = g.list[0].q[k];
+      copy._dupCount = g.list.length;
+      copy._dupPlaces = g.list.map(function (o) { return o.label + " — سؤال " + o.num; });
+      g.list.forEach(function (o) { if (DUP_FLAG) DUP_FLAG.add(o.q); });
+      return copy;
+    });
+    return questions;
+  }
+
+  function ensureDupes(subj) {
+    if (!subj) return [];
+    if (DUP_CACHE && DUP_CACHE.has(subj)) return subj.dupes || [];
+    var qs = [];
+    try { qs = computeDupes(subj); } catch (e) { qs = []; }
+    var item = qs.length
+      ? [{ t: DUP_TITLE, d: "أسئلة اتكررت في أكتر من مكان في المادة — الأكتر تكرارًا الأول", questions: qs }]
+      : [];
+    try { Object.defineProperty(subj, "dupes", { value: item, writable: true, configurable: true, enumerable: false }); }
+    catch (e) { subj.dupes = item; }
+    if (DUP_CACHE) DUP_CACHE.set(subj, true);
+    return item;
+  }
+  window.ensureDupes = ensureDupes;
+  window._dupComputeForTest = computeDupes;
+
+  function curSubj() { return typeof subjects !== "undefined" ? subjects[currentSubject] : null; }
+
+  function syncDupButton(subj) {
+    var btn = document.getElementById("tab-btn-dupes");
+    if (!btn) return;
+    subj = subj || curSubj();
+    var has = !!(subj && ensureDupes(subj).length);
+    btn.style.display = has ? "inline-block" : "none";
+    if (!has) {
+      var act = document.querySelector("#section2 .sub-content.active");
+      if (act && act.id === "sub-dupes") {
+        var first = document.querySelector("#sub-tabs-container .sub-tab-button");
+        if (first && typeof openSubTab === "function") openSubTab({ currentTarget: first }, "sub-lectures");
+      }
+    }
+  }
+
+  function renderDupList() {
+    var box = document.getElementById("dupes-list");
+    var subj = curSubj();
+    if (!box || !subj) return;
+    var item = ensureDupes(subj)[0];
+    if (!item) { box.innerHTML = '<p style="color:var(--text-hint)">مفيش أسئلة مكررة في المادة دي.</p>'; return; }
+    box.innerHTML = '<p class="ld-hint">🔁 الأسئلة اللي اتكررت في أكتر من مكان (محاضرات / ميدتيرم / فاينل / بنوك أسئلة). تحت كل سؤال هتلاقي كل الأماكن اللي اتكرر فيها.</p>' +
+      examCardHTML(subj, item, "dupes", 0, item.questions.length, item.t);
+  }
+
+  // ---------- الـ hooks ----------
+  function hook(name, make) {
+    var orig = window[name];
+    if (typeof orig !== "function") return;
+    window[name] = make(orig);
+  }
+
+  hook("renderActiveSubList", function (orig) {
+    return function () {
+      var r = orig.apply(this, arguments);
+      try {
+        var sec = document.getElementById("section2");
+        var act = document.querySelector("#section2 .sub-content.active");
+        if (sec && sec.classList.contains("active") && act && act.id === "sub-dupes") renderDupList();
+      } catch (e) {}
+      return r;
+    };
+  });
+
+  hook("updateSubTabsVisibility", function (orig) {
+    return function (e) {
+      var r = orig.apply(this, arguments);
+      try { syncDupButton(e); } catch (x) {}
+      return r;
+    };
+  });
+
+  hook("renderAllLists", function (orig) {
+    return function () {
+      var r = orig.apply(this, arguments);
+      try { syncDupButton(); } catch (x) {}
+      return r;
+    };
+  });
+
+  hook("openQuiz", function (orig) {
+    return function (e, t) {
+      try { if (t === "dupes" && typeof subjects !== "undefined") ensureDupes(subjects[e]); } catch (x) {}
+      return orig.apply(this, arguments);
+    };
+  });
+
+  hook("quizContextHeader", function (orig) {
+    return function () {
+      var h = orig.apply(this, arguments);
+      try { if (st && st.ctx && st.ctx.kind === "dupes") h = h.replace("🧠 المحاضرة:", "🔁 اختبار:"); } catch (x) {}
+      return h;
+    };
+  });
+
+  function ownsQuestions() {
+    var ctx = (st && st.ctx) || {}, kind = ctx.kind;
+    if (kind === "lecture" || kind === "lec") return true;
+    if (kind === "midterms" || kind === "finals" || kind === "testBanks") {
+      var arr = (st.subject && st.subject[kind]) || [];
+      for (var i = 0; i < arr.length; i++)
+        if (arr[i] && arr[i].t === ctx.name) return !!(arr[i].questions && arr[i].questions.length);
+    }
+    return false;
+  }
+
+  function decorate() {
+    try {
+      if (!st || !st.data || !st.data.length) return;
+      var area = document.getElementById("qa-area");
+      var card = area && area.querySelector(".exam-qcard");
+      var qt = card && card.querySelector(".exam-qtext");
+      if (!qt) return;
+      var idx = st.current, q = st.data[idx];
+      if (!q) return;
+      var html = "";
+      if (st.ctx && st.ctx.kind === "dupes" && q._dupPlaces) {
+        if (st._dupSeen !== idx) { st._dupSeen = idx; st._dupOpenIdx = -1; }
+        var open = st._dupOpenIdx === idx;
+        var n = q._dupCount || q._dupPlaces.length;
+        html = '<div class="dup-box' + (open ? " open" : "") + '">' +
+          '<div class="dup-head"><span class="dup-count">🔁 السؤال ده اتكرر ' + dupTimes(n) + '</span>' +
+          '<button type="button" class="dup-toggle" aria-expanded="' + (open ? "true" : "false") + '" onclick="dupToggle(this)">' +
+          '<span class="dup-lbl">' + (open ? "إخفاء الأماكن" : "عرض الأماكن") + '</span><span class="dup-arrow">⌄</span></button></div>' +
+          '<ul class="dup-list"' + (open ? "" : " hidden") + '>' +
+          q._dupPlaces.map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("") + "</ul></div>";
+      } else if (DUP_FLAG && DUP_FLAG.has(q) && ownsQuestions()) {
+        html = '<div class="dup-flag">🔁 سؤال مكرر</div>';
+      }
+      if (html) qt.insertAdjacentHTML("afterend", html);
+    } catch (e) {}
+  }
+
+  hook("renderCurrentQuestion", function (orig) {
+    return function () {
+      var r = orig.apply(this, arguments);
+      decorate();
+      return r;
+    };
+  });
+
+  window.dupToggle = function (btn) {
+    var box = btn && btn.closest ? btn.closest(".dup-box") : null;
+    if (!box) return;
+    var list = box.querySelector(".dup-list");
+    var willOpen = list.hasAttribute("hidden");
+    if (willOpen) list.removeAttribute("hidden"); else list.setAttribute("hidden", "");
+    btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    var lbl = btn.querySelector(".dup-lbl");
+    if (lbl) lbl.textContent = willOpen ? "إخفاء الأماكن" : "عرض الأماكن";
+    box.classList.toggle("open", willOpen);
+    if (st) { st._dupSeen = st.current; st._dupOpenIdx = willOpen ? st.current : -1; }
+  };
+})();
