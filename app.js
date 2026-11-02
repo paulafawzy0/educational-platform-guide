@@ -3815,3 +3815,136 @@ function __bootDept2() {
         window.ResizeObserver && new ResizeObserver(o).observe(s));
     }
   })());
+
+/* ==========================================================
+   ★ إشعارات Push (الموقع مقفول) — إضافة فوق نظام الإشعارات الحالي
+   - نظام الجرس (notifications / lecturesAddedLog …) زي ما هو من غير تغيير.
+   - بيضيف زرار "فعّل إشعارات الجهاز" جوه قائمة الجرس.
+   ========================================================== */
+(function () {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+
+  function b64ToU8(s) {
+    var p = "=".repeat((4 - (s.length % 4)) % 4);
+    var raw = atob((s + p).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function curDept() {
+    try { return typeof CUR_DEPT !== "undefined" && CUR_DEPT ? CUR_DEPT : ""; } catch (e) { return ""; }
+  }
+
+  function getReg() {
+    return navigator.serviceWorker.getRegistration().then(function (r) {
+      return r || navigator.serviceWorker.ready;
+    });
+  }
+
+  function sendSub(sub) {
+    return fetch("/api/push-subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), dept: curDept() }),
+    }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); });
+  }
+
+  function isIOSBrowserTab() {
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+    return ios && !standalone;
+  }
+
+  function enablePush() {
+    if (Notification.permission === "denied") {
+      showToast("🚫 الإشعارات متقفلة من إعدادات المتصفح — فعّليها من هناك");
+      return Promise.resolve();
+    }
+    return Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") { showToast("لم يتم السماح بالإشعارات"); return; }
+      return fetch("/api/push-subscribe").then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.key) throw new Error("no key");
+        return getReg().then(function (reg) {
+          return reg.pushManager.getSubscription().then(function (s) {
+            return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(j.key) });
+          });
+        });
+      }).then(sendSub).then(function () {
+        showToast("✅ اتفعّلت إشعارات الجهاز");
+      });
+    }).catch(function () {
+      showToast("⚠️ تعذّر تفعيل الإشعارات — جرّب تاني بعد شوية");
+    }).then(refreshBtn);
+  }
+
+  function disablePush() {
+    return getReg().then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (s) {
+        if (!s) return;
+        var ep = s.endpoint;
+        return s.unsubscribe().then(function () {
+          return fetch("/api/push-subscribe", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: ep }),
+          }).catch(function () {});
+        });
+      });
+    }).then(function () { showToast("🔕 اتقفلت إشعارات الجهاز"); })
+      .catch(function () {})
+      .then(refreshBtn);
+  }
+
+  function refreshBtn() {
+    var btn = document.getElementById("push-toggle-btn");
+    if (!btn) return;
+    if (Notification.permission === "denied") {
+      btn.textContent = "🚫 الإشعارات متقفلة من إعدادات المتصفح";
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = false;
+    getReg().then(function (reg) { return reg && reg.pushManager.getSubscription(); }).then(function (s) {
+      var on = !!s && Notification.permission === "granted";
+      btn.textContent = on ? "🔕 إيقاف إشعارات الجهاز" : "🔔 فعّل إشعارات الجهاز (لما المحاضرات تنزل)";
+      btn.setAttribute("data-on", on ? "1" : "0");
+    }).catch(function () {});
+  }
+
+  function mountBtn() {
+    var list = document.getElementById("notif-list");
+    if (!list || !list.parentNode || document.getElementById("push-bar")) return;
+    var bar = document.createElement("div");
+    bar.id = "push-bar";
+    bar.style.cssText = "padding:10px 14px;border-bottom:1px solid var(--border);background:var(--notif-bg);";
+    var btn = document.createElement("button");
+    btn.id = "push-toggle-btn";
+    btn.type = "button";
+    btn.style.cssText = "width:100%;padding:9px 12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:13px;cursor:pointer;";
+    btn.textContent = "🔔 فعّل إشعارات الجهاز (لما المحاضرات تنزل)";
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation(); // الجرس نفسه بيقفل القائمة لو الضغطة طلعت له
+      if (isIOSBrowserTab()) {
+        showToast("📱 على الآيفون: ضيفي الموقع للشاشة الرئيسية الأول وافتحيه منها");
+        return;
+      }
+      (btn.getAttribute("data-on") === "1" ? disablePush() : enablePush());
+    });
+    bar.appendChild(btn);
+    list.parentNode.insertBefore(bar, list);
+    refreshBtn();
+  }
+
+  // لو الطالب مشترك أصلاً: نحدّث القسم بصمت (لو غيّره)
+  function silentSync() {
+    if (Notification.permission !== "granted") return;
+    getReg().then(function (reg) { return reg && reg.pushManager.getSubscription(); }).then(function (s) {
+      if (s) return sendSub(s);
+    }).catch(function () {});
+  }
+
+  function init() { mountBtn(); silentSync(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();

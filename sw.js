@@ -1,5 +1,5 @@
 /* Service Worker — غيّري VERSION مع كل تعديل مهم: v1 → v2 → v3 ... */
-const VERSION = "v1793643572139";
+const VERSION = "v1793656808781";
 const CACHE = `study-platform-${VERSION}`;
 
 const APP_SHELL = [
@@ -217,4 +217,48 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
   // Google Drive وأي حاجة تانية بتعدي من غير تدخل
+});
+
+/* ==========================================================
+   ★ إشعارات Push (الموقع مقفول)
+   - push: السيرفر (api/push-send) بيبعت {title, body, url, tag}
+   - notificationclick: يفتح الموقع (أو يرجّع التبويب المفتوح)
+   ========================================================== */
+self.addEventListener("push", (event) => {
+  let d = {};
+  try {
+    d = event.data ? event.data.json() : {};
+  } catch (e) {
+    d = { body: event.data ? event.data.text() : "" };
+  }
+  const title = d.title || "منصة المواد";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: d.body || "",
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-192.png",
+      dir: "rtl",
+      lang: "ar",
+      tag: d.tag || undefined,
+      data: { url: d.url || "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  let target = (event.notification.data && event.notification.data.url) || "/";
+  // مسار داخل الموقع بس
+  if (typeof target !== "string" || target.charAt(0) !== "/" || target.indexOf("//") === 0) target = "/";
+  const full = new URL(target, self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url.startsWith(self.location.origin) && "focus" in c) {
+          return c.focus().then(() => ("navigate" in c ? c.navigate(full) : null));
+        }
+      }
+      return self.clients.openWindow(full);
+    }),
+  );
 });
