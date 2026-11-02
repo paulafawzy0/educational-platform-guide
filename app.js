@@ -2920,6 +2920,14 @@ function fbSyncFormUI() {
           : "إرسال";
   // الـ reCAPTCHA مش محتاجة مع واتساب، ولا بعد ما التأكيد يبدأ
   if (cap) cap.style.display = _fbOtp.sid ? "none" : "";
+  // واتساب / تليجرام: رفع الصور مش بيشتغل، فبنخفي القسم (والتعليمات في الملاحظة اللي فوق)
+  var up = document.querySelector(".fb-upload-section"),
+    chat = "whatsapp" === t || "telegram" === t;
+  if (up) up.style.display = chat ? "none" : "";
+  if (chat && _fbImages && _fbImages.length) {
+    _fbImages = [];
+    "function" == typeof fbRenderPreviews && fbRenderPreviews();
+  }
 }
 
 function fbOtpReset() {
@@ -2939,9 +2947,9 @@ function fbOnContactChange() {
     notes = {
       email: "📧 هنبعتلك كود تأكيد على الإيميل ده، ولازم تكتبه علشان الرسالة تتبعت.",
       telegram:
-        "✈️ هيتفتح تليجرام برسالة جاهزة وإنت اللي تضغط إرسال. (الصور مش بتتبعت من هنا)",
+        "✈️ هيتفتح تليجرام برسالة جاهزة وإنت اللي تضغط إرسال. لو عايز تبعت صورة (سكرين شوت مثلًا)، ابعتها في المحادثة بعد الرسالة.",
       whatsapp:
-        "💬 هيتفتح واتساب برسالة جاهزة وإنت اللي تضغط إرسال. (الصور مش بتتبعت من واتساب)",
+        "💬 هيتفتح واتساب برسالة جاهزة وإنت اللي تضغط إرسال. لو عايز تبعت صورة (سكرين شوت مثلًا)، ابعتها في المحادثة بعد الرسالة.",
     };
   fbOtpReset();
   wrap && (wrap.style.display = "email" === t ? "" : "none");
@@ -3024,7 +3032,7 @@ function fbSendChatLink(kind) {
         "ok",
         (wa ? "💬 اتفتح واتساب" : "✈️ اتفتح تليجرام") +
           " — اضغط إرسال هناك علشان الرسالة توصلنا." +
-          (_fbImages.length ? "\n📷 الصور ابعتها في نفس المحادثة." : ""),
+          "\n📷 لو عايز تبعت صورة، ابعتها في نفس المحادثة بعد الرسالة.",
       );
     })
     .catch(function () {
