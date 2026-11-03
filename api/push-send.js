@@ -51,8 +51,11 @@ export default async function handler(req, res) {
     for (let i = 0; i < targets.length; i += CHUNK) {
       await Promise.all(targets.slice(i, i + CHUNK).map(async (s) => {
         try {
-          await webpush.sendNotification(s.sub, payload, { TTL: 60 * 60 * 24 });
-          sent++;
+await webpush.sendNotification(s.sub, payload, {
+  TTL: 60 * 60 * 24,
+  urgency: "high",
+});
+sent++;
         } catch (e) {
           failed++;
           if (e && (e.statusCode === 404 || e.statusCode === 410)) dead.push(s.id); // اشتراك منتهي
