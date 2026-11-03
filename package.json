@@ -6,7 +6,6 @@
     "deploy": "node build-version.cjs && git add . && git commit -m \"update\" && git push"
   },
   "dependencies": {
-    "googleapis": "^144.0.0",
-    "web-push": "^3.6.7"
+    "googleapis": "^144.0.0"
   }
 }

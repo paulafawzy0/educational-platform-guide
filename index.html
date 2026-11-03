@@ -371,8 +371,6 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
 <style>
 .fb-otp-hint{margin:0;font-size:12.5px;line-height:1.7;color:var(--text-hint)}
 .fb-otp-box{display:flex;flex-direction:column;gap:10px;padding:12px;border:2px dashed var(--accent);border-radius:12px;background:var(--bg-card)}
-.fb-otp-tgbtn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;border-radius:10px;background:#08c;color:#fff;font-weight:700;text-decoration:none;font-size:14px}
-.fb-otp-tgbtn:hover{filter:brightness(1.08)}
 .fb-otp-box #fb-otp-code{letter-spacing:6px;text-align:center;font-size:20px;font-weight:700}
 .fb-otp-resend{background:transparent;border:2px solid var(--border);color:var(--text-primary);border-radius:10px;min-height:40px;font:inherit;font-weight:700;cursor:pointer}
 .fb-otp-resend:disabled{opacity:.5;cursor:not-allowed}
@@ -408,7 +406,6 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
 
             <div id="fb-otp-box" class="fb-otp-box" style="display:none;">
                 <p id="fb-otp-hint" class="fb-otp-hint"></p>
-                <a id="fb-otp-tg" class="fb-otp-tgbtn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">✈️ افتح البوت واضغط Start</a>
                 <label>رمز التأكيد (6 أرقام)
                     <input id="fb-otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" dir="ltr" placeholder="000000">
                 </label>
@@ -435,7 +432,7 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
             </label>
 
             
-            <div class="fb-upload-section">
+            <div class="fb-upload-section" id="fb-upload-section">
                 <div class="fb-upload-head">
                     <span>📷 صور (اختياري)</span>
                     <small id="fb-img-counter">0 / 5 صور — أقصى حجم 1MB لكل صورة</small>
@@ -453,6 +450,7 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
 
                 <div class="fb-thumbs" id="fb-thumbs" aria-live="polite"></div>
             </div>
+            <p id="fb-chat-img-note" class="fb-otp-hint" style="display:none;"></p>
 
 
 <div class="fb-recaptcha-wrap">

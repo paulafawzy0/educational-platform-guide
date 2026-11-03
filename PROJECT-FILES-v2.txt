@@ -1,0 +1,1221 @@
+
+دليل تشغيلي كامل للمشرف/الأدمن — كل حاجة تحتاجها لإضافة وتعديل المحتوى في مكان واحد
+
+🗓️ آخر تحديث: أكتوبر 2026 — متوافق مع index.html + app.js (نسخة الأقسام الأربعة)
+🔗 الرابط: https://fcal-third-year.vercel.app/
+🆕 تحديث v2 (واجهة جديدة + تفريغ الصوت): الملفين index-v2.html و app-v2.js — الشريط الجانبي والهيدر الجديد، وقسم 🎙️ تفريغ صوت المحاضرة/السكشن (الجزء 4 و5 و8.8 و11). لو بتنشر v2 غيّر اسم index-v2.html إلى index.html، وحدّث اسم app.js في sw.js/pwa.js لو متسجل بالاسم.
+🆕 الجديد في النسخة دي: نظام الأقسام (CS / IS / SE / AI) + مجلد مواد مشترك datenew/subjects/ + مجلدات lectures/ و questions/ و sections/ جوه كل مادة + sw.js + build-version + vercel.json + CODEOWNERS
+
+📑 المحتويات
+الجزء 1: نظرة عامة وهيكل المشروع
+الجزء 2: نظام الأقسام (جديد) — departments.js + فهرس كل قسم
+الجزء 3: البدء السريع — إضافة مادة جديدة / ربط مادة بقسم
+الجزء 4: إضافة محاضرة (خطوة بخطوة)
+الجزء 5: إضافة سكشن/معيد (خطوة بخطوة)
+الجزء 6: إضافة الأسئلة (MCQ + مقالي)
+الجزء 7: إضافة الامتحانات والبنوك
+الجزء 8: الملخص والملاحظات والروابط وتفريغ الصوت
+الجزء 9: الإشعارات والإعلانات — كيف تضيف إشعار لأي حاجة
+الجزء 10: الجدول الدراسي (Google Sheets)
+الجزء 11: القوالب الفارغة للنسخ السريع
+الجزء 12: شرح كل الحقول (جداول شاملة)
+الجزء 13: الأخطاء الشائعة وكيفية تجنبها
+الجزء 14: URL Routing والميزات
+الجزء 15: API Endpoints
+الجزء 16: ملفات النشر والـ PWA (vercel / sw / build-version / package / CODEOWNERS)
+الجزء 17: قائمة فحص نهائية قبل النشر
+الجزء 18: حل المشاكل الشائعة
+الجزء 19: ⚠️ ملاحظات فنية اكتُشفت في الكود (محتاجة مراجعة)
+الجزء 20: ملحق — الإيموجي الموصى بها
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 1: نظرة عامة وهيكل المشروع
+1.1) 🗂️ خريطة الملفات الكاملة
+text
+educational-platform-guide/           ← (اسم الفولدر على الجهاز: fcai-level3-portal)
+│
+├── index.html                          ← الصفحة الرئيسية (الأساسية دلوقتي)
+├── indexV0.html                        ← نسخة قديمة احتياطية (مش بتتنشر لو متضافة في .vercelignore)
+├── app.js                              ← منطق التطبيق الكامل (~4650 سطر)
+├── index-v2.html / app-v2.js           ← 🆕 نسخة الواجهة الجديدة (v2) + تفريغ الصوت — index-v2.html بيحمّل app-v2.js
+├── pdf-annotator.html                  ← أداة PDF (رسم/تظليل/قلم) بتتفتح في iframe
+├── sw.js                               ← Service Worker (الكاش + الـ Offline)
+├── pwa.js                              ← تسجيل الـ SW + زر التثبيت (بيتحمّل متأخر بعد load)
+├── manifest.webmanifest                ← إعدادات الـ PWA
+├── build-version.cjs                   ← سكريبت بيولّد رقم إصدار عند البناء (ظاهر في الجهاز بامتداد .cjs)
+├── package.json                        ← سكريبتات البناء (build) على Vercel
+├── vercel.json                         ← إعدادات Vercel (headers / rewrites / كاش)
+├── .vercelignore                       ← يمنع رفع ملفات مش لازمة (indexV0 / README ... إلخ)
+├── README.md                           ← تعريف عام بالمشروع
+├── NAMING.md                           ← قواعد التسمية (slugs / ملفات / ids)
+├── PROJECT-FILES.txt                   ← هذا الملف
+│
+├── .github/
+│   └── CODEOWNERS                      ← مين مسؤول عن أي جزء من الكود/الداتا
+│
+├── api/                                ← Serverless Functions (Vercel)
+│   ├── feedback.js                     ← استقبال الاقتراحات (reCAPTCHA + صور)
+│   └── sheet.js                        ← وسيط Google Sheets (جدول/إعلانات/مواعيد)
+│
+├── icons/
+│   ├── icon-192.png
+│   └── icon-512.png
+│
+└── datenew/                            ← ★ كل الداتا هنا
+    ├── departments.js                  ← ★ تعريف الأقسام الأربعة (بيتحمّل في index.html)
+    │
+    ├── cs/subjects-index.js            ← علوم الحاسب      (5 مواد)
+    ├── is/subjects-index.js            ← نظم المعلومات    (2 مواد)
+    ├── se/subjects-index.js            ← هندسة البرمجيات  (5 مواد)
+    ├── ai/subjects-index.js            ← الذكاء الاصطناعي (6 مواد)
+    │
+    └── subjects/                       ← ★ كل المواد مرة واحدة (مشتركة وغير مشتركة)
+        ├── visual-programming/         ← cs, se
+        │   ├── visual-programming.js            ← داتا المادة (محاضرات/امتحانات/بنوك)
+        │   ├── sections-visual-programming.json ← السكاشن والمعيدين
+        │   ├── lectures/                        ← PDF المحاضرات (والملخصات)
+        │   ├── questions/                       ← ملفات الأسئلة / الامتحانات / بنوك الأسئلة
+        │   └── sections/                        ← 🆕 ملفات السكاشن (ملف السكشن / تمارين / حل / واجب)
+        ├── computer-graphics/          ← cs, ai
+        ├── computer-networks/          ← cs, se
+        ├── operating-systems/          ← cs, se
+        ├── software-engineering/       ← cs, se, ai
+        ├── algorithms/                 ← se, ai
+        ├── machine-learning/           ← ai
+        ├── neural-networks/            ← ai
+        ├── hci/                        ← ai
+        ├── numerical-analysis/         ← is
+        └── advanced-project-management/← is
+            (كل فولدر مادة جواه نفس الشكل: <slug>.js + sections-<slug>.json + lectures/ + questions/ + sections/)
+
+1.2) 🗺️ المواد وأي قسم بتظهر فيه
+المادة (slug)			cs	is	se	ai
+visual-programming		✅		✅	
+computer-graphics		✅			✅
+computer-networks		✅		✅	
+operating-systems		✅		✅	
+software-engineering		✅		✅	✅
+algorithms					✅	✅
+machine-learning					✅
+neural-networks					✅
+hci						✅
+numerical-analysis			✅
+advanced-project-management		✅
+الإجمالي				5	2	5	6   (= 18 ظهور لـ 11 مادة فعلية)
+
+1.3) ⚠️ القواعد الأساسية
+- المادة المشتركة (زي software-engineering) ليها نسخة واحدة بس في datenew/subjects/ — وكل قسم بيشاور عليها من subjects-index.js بتاعه.
+- لو عدّلت محاضرة في مادة مشتركة → التعديل بيظهر في كل الأقسام اللي فيها المادة دي (ده المطلوب).
+- ملف المادة: datenew/subjects/{slug}/{slug}.js
+- ملف السكاشن: datenew/subjects/{slug}/sections-{slug}.json
+- اسم مجلد المادة = الـ slug بالظبط (حروف إنجليزي صغيرة وشرطات).
+- تقدّم الطالب (إجابات/علامات/نتائج) متخزّن بـ اسم المادة → المادة المشتركة بتحافظ على تقدّمها لو الطالب غيّر القسم.
+- ⚠️ مسار السكاشن التلقائي في app.js لسه قديم (datenew/{slug}/...) — عشان كده لازم تكتب sectionsFile صراحةً في كل مادة (شوف الجزء 19).
+
+1.4) 📌 المفاهيم الأساسية
+المفهوم	معناه	مثال
+القسم	واحد من 4 (cs/is/se/ai) — له فهرس مواد	ai
+المادة	ملف JS في datenew/subjects/{slug}/	computer-networks
+المحاضرة	كائن داخل lectures[]	"مقدمة الشبكات"
+السكشن	كائن داخل sections[] في JSON	"سكشن A — م. أحمد"
+المعيد	شخص، وله instructorId ثابت	inst-ahmed
+المجموعة	اسم المجموعة تحت المعيد	"سكشن A"
+الفصل (Chapter)	تجميع لمجموعة محاضرات	"الفصل الأول"
+
+1.5) ⚠️ قاعدة ذهبية
+قبل أي إضافة، خد نسخة احتياطية من الملف اللي هتعدّله (أو اعمل commit).
+زر 💾 في الهيدر بيصدّر نسخة كاملة من التقدم والإشعارات (للطالب) — مش للداتا.
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 2: نظام الأقسام (جديد)
+2.1) 🔄 إزاي بيشتغل؟
+1) index.html بيحمّل datenew/departments.js (تعريف الأقسام).
+2) app.js بيقرأ القسم المختار من:
+   - ?dept=ai في الرابط (رابط مشاركة) — بيتحفظ تلقائيًا، أو
+   - localStorage تحت المفتاح dept_v1.
+3) أول زيارة (مفيش قسم محفوظ) → تظهر نافذة 🎓 "اختار القسم بتاعك" ومش بتتقفل.
+4) بعد الاختيار بيتحمّل ملف الفهرس بتاع القسم بس (مثلًا datenew/ai/subjects-index.js) — الأقسام التانية ما بتتحمّلش.
+5) زر 🎓 في شريط المواد بيسمح بتغيير القسم (بيحفظ الاختيار ويعمل reload نظيف).
+
+2.2) 📝 شكل datenew/departments.js
+js
+var DEPARTMENTS = [
+  { id: "cs", name: "علوم الحاسب",        en: "Computer Science",       icon: "💻", index: "datenew/cs/subjects-index.js", active: true },
+  { id: "is", name: "نظم المعلومات",       en: "Information Systems",   icon: "🗄️", index: "datenew/is/subjects-index.js", active: true },
+  { id: "se", name: "هندسة البرمجيات",     en: "Software Engineering",   icon: "🏗️", index: "datenew/se/subjects-index.js", active: true },
+  { id: "ai", name: "الذكاء الاصطناعي",    en: "Artificial Intelligence", icon: "🤖", index: "datenew/ai/subjects-index.js", active: true }
+];
+📌 الحقول: id (إنجليزي صغير — بيستخدم في ?dept=) / name (يظهر للطالب) / en (تحت الاسم) / icon / index (مسار فهرس المواد) / active (false = القسم مخفي).
+⚠️ الأسماء أعلاه أمثلة للشكل — راجع الملف الفعلي عندك للقيم الحقيقية.
+
+2.3) 🔗 روابط المشاركة بالقسم
+https://fcal-third-year.vercel.app/?dept=ai
+https://fcal-third-year.vercel.app/?dept=cs&subject=computer-graphics
+https://fcal-third-year.vercel.app/?dept=se&subject=algorithms&lecture=algo-lecture-02
+
+2.4) 📝 شكل datenew/{dept}/subjects-index.js
+كل قسم عنده ملف فهرس بيعرّف المتغير SUBJECTS_INDEX بمواد القسم ده بس.
+مثال: datenew/ai/subjects-index.js
+js
+var SUBJECTS_INDEX = [
+  {
+    slug:         "computer-graphics",
+    name:         "Computer Graphics",
+    en:           "الرسم بالحاسب",
+    icon:         "🎨",
+    file:         "datenew/subjects/computer-graphics/computer-graphics.js",
+    sectionsFile: "datenew/subjects/computer-graphics/sections-computer-graphics.json",
+    active:       true
+  },
+  {
+    slug:         "software-engineering",
+    name:         "Software Engineering",
+    en:           "هندسة البرمجيات",
+    icon:         "🏗️",
+    file:         "datenew/subjects/software-engineering/software-engineering.js",
+    sectionsFile: "datenew/subjects/software-engineering/sections-software-engineering.json",
+    active:       true
+  }
+  // ... باقي مواد القسم (algorithms / machine-learning / neural-networks / hci)
+];
+📌 ترتيب المواد في المصفوفة = ترتيب ظهورها في الشريط.
+📌 المادة المشتركة: انسخ نفس الـ object (نفس slug ونفس file) في فهرس كل قسم بتظهر فيه.
+📌 ممنوع تعمل نسخة تانية من ملف المادة المشتركة — شاور على نفس الملف.
+
+2.5) 📌 اللي بيتحفظ باسم القسم
+المفتاح	المحتوى
+dept_v1	القسم المختار
+last_open_state_{dept}	آخر صفحة/مادة/محاضرة داخل القسم
+mainTitle_{dept}	عنوان الصفحة (لتقليل الوميض)
+sbHtml_{dept}	نسخة شريط المواد (لتقليل الوميض)
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 3: البدء السريع — إضافة مادة جديدة / ربط مادة بقسم
+3.1) 📝 الخطوات الخمسة (مادة جديدة تمامًا)
+الخطوة 1: أنشئ مجلد المادة وجواه الفولدرين
+text
+datenew/subjects/[subject-slug]/
+datenew/subjects/[subject-slug]/lectures/
+datenew/subjects/[subject-slug]/questions/
+datenew/subjects/[subject-slug]/sections/
+الخطوة 2: أنشئ ملف المادة datenew/subjects/data-structures/data-structures.js
+js
+subjects.push({
+  name: "Data Structures",
+  en:   "هياكل البيانات",
+  icon: "🌳",
+
+  chapters: [],
+  lectures: [],
+  midtermsCategories: [],
+  finalsCategories: [],
+  testBanks: [],
+  linkCategories: []
+});
+الخطوة 3: أنشئ ملف السكاشن datenew/subjects/data-structures/sections-data-structures.json
+json
+{
+  "schemaVersion": 2,
+  "subject": "data-structures",
+  "sections": []
+}
+الخطوة 4: ضيف المادة في فهرس كل قسم هتظهر فيه (datenew/cs/subjects-index.js مثلًا)
+js
+{
+  slug:         "data-structures",                       // معرّف فريد (إنجليزي فقط)
+  name:         "Data Structures",                       // الاسم الظاهر في الشريط
+  en:           "هياكل البيانات",                        // العربي (تحت الاسم)
+  icon:         "🌳",
+  file:         "datenew/subjects/data-structures/data-structures.js",
+  sectionsFile: "datenew/subjects/data-structures/sections-data-structures.json",
+  sectionTitle: "🧩 سكاشن هياكل البيانات",               // (اختياري)
+  active:       true                                     // false = مخفي
+}
+الخطوة 5: ارفع ملفات الـ PDF في lectures/ و questions/ و sections/ (حسب نوعها) واستخدم مساراتها في المحاضرات والسكاشن.
+
+3.2) 🔗 ربط مادة موجودة بقسم تاني
+مثال: عايز hci تظهر في قسم cs كمان:
+1) افتح datenew/cs/subjects-index.js
+2) انسخ object مادة hci من datenew/ai/subjects-index.js حرفيًا (نفس slug/file/sectionsFile)
+3) ضيفه في المكان اللي عايز ترتيبه
+4) خلاص — مفيش نسخ ملفات.
+
+3.3) 🏫 إضافة قسم جديد
+1) أنشئ datenew/{id}/subjects-index.js بـ var SUBJECTS_INDEX = [ ... ];
+2) ضيف object القسم في datenew/departments.js (id / name / en / icon / index / active)
+3) اختبر ?dept={id}.
+4) حدّث CODEOWNERS لو فيه مسؤول للقسم الجديد.
+
+3.4) 📌 ملاحظات مهمة
+- slug لازم يكون حروف إنجليزي صغيرة بدون مسافات.
+- active: false = المادة مخفية عن الطلاب (بس تفضل قابلة للفتح من الرابط المباشر).
+- sectionTitle (اختياري) = عنوان قسم السكشن جوه المحاضرة.
+- 📂 توصية لتنظيم الملفات جوه المادة:
+    lectures/   ← ملفات المحاضرات + الملخصات
+    questions/  ← ملفات الأسئلة + الامتحانات + بنوك الأسئلة PDF
+    sections/   ← 🆕 ملفات السكاشن: ملف السكشن + التمارين + الحل + الواجب
+                  (اختياري: فولدر فرعي لكل معيد، مثلًا sections/inst-ahmed/)
+  (التسمية نفسها مش مفروضة من الكود — الكود بيقرأ المسار اللي تكتبه — بس خلّيها ثابتة، وراجع NAMING.md.)
+
+3.5) 📋 مثال: datenew/cs/subjects-index.js كامل (5 مواد)
+js
+var SUBJECTS_INDEX = [
+  { slug: "visual-programming",   name: "Visual Programming",   en: "البرمجة المرئية",   icon: "🧩", file: "datenew/subjects/visual-programming/visual-programming.js",     sectionsFile: "datenew/subjects/visual-programming/sections-visual-programming.json",     active: true },
+  { slug: "computer-graphics",    name: "Computer Graphics",    en: "الرسم بالحاسب",     icon: "🎨", file: "datenew/subjects/computer-graphics/computer-graphics.js",       sectionsFile: "datenew/subjects/computer-graphics/sections-computer-graphics.json",       active: true },
+  { slug: "computer-networks",    name: "Computer Networks",    en: "شبكات الحاسوب",     icon: "🌐", file: "datenew/subjects/computer-networks/computer-networks.js",       sectionsFile: "datenew/subjects/computer-networks/sections-computer-networks.json",       sectionTitle: "🧩 سكاشن الشبكات", active: true },
+  { slug: "operating-systems",    name: "Operating Systems",    en: "نظم التشغيل",       icon: "⚙️", file: "datenew/subjects/operating-systems/operating-systems.js",       sectionsFile: "datenew/subjects/operating-systems/sections-operating-systems.json",       active: true },
+  { slug: "software-engineering", name: "Software Engineering", en: "هندسة البرمجيات",   icon: "🏗️", file: "datenew/subjects/software-engineering/software-engineering.js", sectionsFile: "datenew/subjects/software-engineering/sections-software-engineering.json", active: true }
+];
+(باقي الأقسام بنفس الأسلوب: is = numerical-analysis + advanced-project-management / se = visual-programming + computer-networks + operating-systems + software-engineering + algorithms / ai = computer-graphics + software-engineering + algorithms + machine-learning + neural-networks + hci)
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 4: إضافة محاضرة (خطوة بخطوة)
+4.1) 📝 الخطوات الخمسة
+الخطوة 1: افتح ملف المادة
+مثال: datenew/subjects/computer-networks/computer-networks.js
+
+الخطوة 2: دوّر على آخر محاضرة
+دوّر على lectures: [ وافتح آخر قوس } قبل ].
+
+الخطوة 3: ضيف فاصلة (,) بعد آخر محاضرة
+
+الخطوة 4: ارفع الـ PDF في lectures/ (والأسئلة في questions/) وانسخ القالب التالي والصقه
+js
+{
+  id: "net-lecture-04",
+  t: "المحاضرة الرابعة — Transport Layer",
+  d: "TCP, UDP, Flow Control, Congestion Control",
+  pdf:  "datenew/subjects/computer-networks/lectures/net-4.pdf",
+  pdf2: "datenew/subjects/computer-networks/questions/net-4-questions.pdf",
+  sectionTitle: "🧩 سكاشن Transport Layer",
+
+  audio: [
+    { t: "الجزء الأول", url: "datenew/subjects/computer-networks/lectures/net-4-part1.mp3" }
+  ],
+
+  videos: [
+    { t: "حل أسئلة المحاضرة", url: "https://youtu.be/XXXXXXXXXXX" }
+  ],
+
+  links: [
+    { t: "🎥 تسجيل الفيديو", d: "المحاضرة كاملة", url: "https://example.com/net-4-video" },
+    { t: "📑 السلايدات", url: "https://example.com/net-4-slides" }
+  ],
+
+  linkCategories: [
+    {
+      category: "فيديوهات عربية",
+      icon: "🇪🇬",
+      description: "شروحات بالعربية",
+      links: [
+        {
+          t: "شرح TCP vs UDP",
+          d: "مقارنة مبسطة بالعربي",
+          icon: "🇪🇬",
+          actions: [
+            { label: "📖 الشرح", url: "https://youtube.com/...", type: "view", color: "red" }
+          ]
+        }
+      ]
+    }
+  ],
+
+  questions: [
+    {
+      q: "ما الفرق بين TCP و UDP؟",
+      options: [
+        "TCP موثوق ومنظم — UDP أسرع وغير موثوق",
+        "TCP أسرع",
+        "مفيش فرق",
+        "UDP للتشفير فقط"
+      ],
+      correct: 0,
+      translation: "What is the difference between TCP and UDP?",
+      video: { t: "شرح السؤال", url: "https://youtu.be/XXXXXXXXXXX" },
+      explanation: "TCP يضمن التسليم والترتيب عبر Handshake — UDP أسرع بدون ضمانات."
+    },
+    {
+      type: "essay",
+      q: "اشرح مبدأ الـ Flow Control في TCP.",
+      answer:
+        "الـ Flow Control:\n" +
+        "• يمنع المُرسِل من إغراق المستقبِل.\n" +
+        "• بيستخدم Window Size اللي المستقبِل يعلن عنه.\n" +
+        "• لو الـ Buffer امتلأ، المستقبِل يعلن Window = 0.",
+      tags: ["TCP", "Flow Control"],
+      ref: "المحاضرة 4 — Section 3.5"
+    }
+  ],
+
+  notes: "راجع الأمثلة 1-3 قبل المحاضرة الجاية.",
+
+  summary: {
+    pdf: "datenew/subjects/computer-networks/lectures/net-4-summary.pdf",
+    text: "نقاط رئيسية:\n• TCP موثوق\n• UDP أسرع\n• Flow Control يمنع الازدحام"
+  },
+
+  transcript: {
+    pdf: "datenew/subjects/computer-networks/lectures/net-4-transcript.pdf",
+    text: "تفريغ صوت المحاضرة:\nالدكتور: النهاردة هنتكلم عن الـ Transport Layer..."
+  }
+}
+الخطوة 5: تحقق من صحة الأقواس
+بعد الإضافة، الملف لازم يبان كده:
+
+js
+lectures: [
+  { /* محاضرة 1 */ },
+  { /* محاضرة 2 */ },
+  { /* محاضرة 3 */ },
+  { /* محاضرة 4 الجديدة */ }   ← آخر واحد بدون فاصلة
+],
+
+4.2) ✅ علامات النجاح
+□ id فريد (مش مكرر مع محاضرة تانية في نفس المادة)
+□ t مليان
+□ الفاصلة , بعد كل محاضرة ما عدا الأخيرة
+□ مسار الـ PDF بيبدأ بـ datenew/subjects/{slug}/lectures/ (أو questions/)
+□ الأسئلة موجودة (ولو سؤال واحد)
+□ type: "essay" موجود في الأسئلة المقالية
+□ لو ضفت transcript: فيه pdf أو text (أو الاتنين) — ولو الاتنين فاضيين القسم بيتخفي لوحده
+
+4.3) 📌 الحقول المتاحة للمحاضرة
+الحقل	النوع	إجباري	الوصف
+id	string	✅	معرّف فريد (مثال: net-lecture-04)
+t	string	✅	عنوان المحاضرة
+d	string	❌	وصف قصير
+pdf	url/path	❌	ملف المحاضرة PDF
+pdf2	url/path	❌	ملف أسئلة منفصل
+sectionTitle	string	❌	عنوان قسم السكشن
+chapter	string	❌	اسم الفصل (بديل لـ chapters)
+links[]	array	❌	روابط مباشرة
+linkCategories[]	array	❌	روابط مجمّعة
+audio	url / array	❌	تسجيل صوتي: "رابط" أو [{t, url}] (ملف mp3 مباشر) — مبيشتغلش إلا لما الطالب يضغط تشغيل
+videos[]	array	❌	فيديوهات المحاضرة [{t, url}] (أو video: "رابط") — مبتشتغلش إلا بالضغط
+questions[]	array	❌	بنك الأسئلة
+notes	string	❌	ملاحظات وتكاليف
+summary	object	❌	ملخص (pdf أو text)
+transcript	object / string	❌	🎙️ تفريغ صوت المحاضرة: {pdf, text} (واحد منهم أو الاتنين) أو نص مباشر — شوف 8.8
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 5: إضافة سكشن/معيد (خطوة بخطوة)
+5.1) 📝 الخطوات الأربعة
+الخطوة 1: افتح ملف السكاشن
+مثال: datenew/subjects/computer-networks/sections-computer-networks.json
+
+الخطوة 2: دوّر على آخر } قبل ] النهائية
+الخطوة 3: ضيف فاصلة (,) بعد آخر سكشن
+الخطوة 4: انسخ القالب التالي والصقه
+json
+{
+  "id": "net-sec-05",
+  "subject": "computer-networks",
+  "lectureId": "net-lecture-04",
+  "lecture": "المحاضرة الرابعة — Transport Layer",
+
+  "instructorId": "inst-ahmed",
+  "instructorName": "م. أحمد سمير",
+  "groupName": "سكشن A",
+  "status": "available",
+
+  "sectionTitle": "🧩 سكاشن Transport Layer",
+
+  "notes": "الحضور إجباري — في تمارين عملية.",
+
+  "materials": {
+    "file":      { "label": "ملف السكشن",   "url": "datenew/subjects/computer-networks/sections/net-sec-05.pdf",     "type": "pdf" },
+    "exercises": { "label": "تمارين",        "url": "datenew/subjects/computer-networks/sections/net-sec-05-ex.pdf",  "type": "pdf" },
+    "solution":  { "label": "الحل النموذجي", "url": "datenew/subjects/computer-networks/sections/net-sec-05-sol.pdf", "type": "pdf" },
+    "recording": "https://example.com/net-sec-05-record",
+    "extraLinks": [
+      { "label": "مراجعة على YouTube", "url": "https://youtube.com/..." }
+    ]
+  },
+
+  "extraFiles": [
+    { "label": "ملف تمارين إضافي", "url": "datenew/subjects/computer-networks/sections/net-sec-05-extra.pdf", "type": "pdf" },
+    { "label": "شرح إضافي",        "url": "https://example.com/extra",   "type": "video" }
+  ],
+
+  "audio": [
+    { "t": "شرح الواجب", "url": "datenew/subjects/computer-networks/sections/net-sec-05-explain.mp3" }
+  ],
+
+  "videos": [
+    { "label": "حل الواجب", "url": "https://youtu.be/XXXXXXXXXXX" }
+  ],
+
+  "linkCategories": [
+    {
+      "category": "فيديوهات عربية",
+      "icon": "🇪🇬",
+      "description": "شروحات بالعربية",
+      "links": [
+        {
+          "t": "شرح TCP vs UDP",
+          "d": "مقارنة مبسطة بالعربي",
+          "icon": "🇪🇬",
+          "actions": [
+            { "label": "📖 الشرح", "url": "https://youtube.com/...", "type": "view", "color": "red" }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "transcript": {
+    "pdf": "datenew/subjects/computer-networks/sections/net-sec-05-transcript.pdf",
+    "text": "تفريغ صوت السكشن:\nالمعيد: النهاردة هنحل الواجب..."
+  },
+
+  "task": {
+    "title": "واجب الأسبوع الرابع",
+    "url": "datenew/subjects/computer-networks/sections/net-sec-05-task.pdf",
+    "dueDate": "2026-05-15",
+    "notes": "سلّم قبل الساعة 11 مساءً — الإجابة عبر Google Form."
+  }
+}
+
+5.2) ⚠️ ملاحظة مهمة عن instructorId
+لو نفس المعيد موجود في سكاشن سابقة → استخدم نفس الـ instructorId.
+لو معيد جديد → اختر instructorId جديد مثل inst-mohamed.
+نفس المعيد = نفس الـ ID دائمًا (حتى لو بيدّي مواد في أقسام مختلفة).
+
+5.3) ✅ علامات النجاح
+□ id فريد لكل سكشن
+□ lectureId يطابق id المحاضرة في ملف المادة
+□ subject يطابق slug المادة في subjects-index.js
+□ ملف السكاشن جوه نفس فولدر المادة، و sectionsFile في الفهرس بيشاور عليه
+□ ملفات السكشن (ملف/تمارين/حل/واجب) كلها في sections/ مش في lectures/ أو questions/
+□ instructorId ثابت لكل معيد
+□ الفاصلة , بعد كل سكشن ما عدا الأخير
+□ JSON صالح (اختبره في jsonlint.com)
+
+5.4) 📌 الحقول المتاحة للسكشن
+الحقل	النوع	إجباري	الوصف
+id	string	✅	فريد (مثال: net-sec-01)
+subject	string	✅	نفس slug المادة
+lectureId	string	✅*	يطابق id المحاضرة
+lecture	string	✅*	عنوان المحاضرة (بديل)
+instructorId	string	✅	فريد للمعيد
+instructorName	string	✅	اسم المعيد
+groupName	string	❌	"سكشن A"
+status	string	❌	available / soon / unavailable
+sectionTitle	string	❌	عنوان القسم
+notes	string	❌	ملاحظة المعيد
+materials	object	❌	ملفات أساسية
+extraFiles[]	array	❌	ملفات إضافية
+audio	url / array	❌	تسجيل صوتي: "رابط" أو [{t, url}] (ملف mp3 مباشر)
+videos[]	array	❌	فيديوهات [{label, url}] (أو video: "رابط")
+linkCategories[]	array	❌	روابط مجمّعة بنفس شكل المحاضرة
+transcript	object / string	❌	🎙️ تفريغ صوت السكشن: {pdf, text} (واحد منهم أو الاتنين) أو نص مباشر — شوف 5.9
+task	object	❌	ملف المهمة
+* واحد منهم على الأقل مطلوب.
+
+5.5) 🎯 حالات السكشن الخاصة
+حالة 1: معيد عنده سكشن واحد → النظام بيفتحه تلقائيًا بدون سؤال
+حالة 2: معيد عنده عدة سكاشن → يظهر منتقي سكاشن تلقائيًا ("المعيد [الاسم] عنده [X] سكاشن — اختر واحد")
+حالة 3: محاضرة مالهاش سكاشن → القسم 🧩 السكشن بيتخفي بدون رسالة خطأ
+حالة 4: ملف السكاشن مش موجود/مش اتحمّل → رسالة "لم تتم إضافة بيانات السكاشن بعد." + زر 🔄 إعادة المحاولة
+
+5.6) 📌 أنواع مواد السكشن
+المفتاح	الأيقونة	الإجراء
+file	📄	فتح
+exercises	📝	فتح
+solution	✅	فتح
+recording	🎥	مشاهدة
+extraLinks	🔗	فتح
+audio	🎧	تشغيل (بالضغط)
+videos	🎬	تشغيل (بالضغط)
+transcript	🎙️	فتح ملف التفريغ / قراءة النص
+linkCategories	🔗	فتح (نفس كروت المحاضرة)
+
+5.7) 📌 حالات السكشن
+الحالة	تظهر إزاي
+available	متاح (أخضر)
+soon	قريبًا (أصفر)
+unavailable	غير متاح (برتقالي)
+
+5.8) 🎧🎬 التسجيل الصوتي والفيديوهات وروابط السكشن
+json
+"audio": [ { "t": "شرح الواجب", "url": "datenew/subjects/{slug}/sections/x.mp3" } ]      ← أو "audio": "رابط" لتسجيل واحد
+📌 التسجيل الصوتي بنفس شكل المحاضرة: مبيتحمّلش ولا بيشتغل إلا لما الطالب يضغط تشغيل، وبيقف لما يقفل السكشن أو يخرج منه. لازم ملف صوت مباشر (mp3 / m4a / ogg) برابط https:// أو مسار نسبي.
+json
+"videos": [ { "label": "حل الواجب", "url": "https://youtu.be/XXXXXXXXXXX" } ]      ← أو "video": "رابط" لفيديو واحد
+📌 الفيديو مبيتحمّلش ولا بيشتغل إلا لما الطالب يضغط عليه، ولو مفيش videos مبيظهرش أي حاجة.
+📌 الأنواع المدعومة: YouTube / Google Drive (الملف مشارك للكل) / Vimeo / ملف mp4 أو webm مباشر — برابط https:// أو مسار نسبي (datenew/subjects/{slug}/sections/x.mp4).
+📌 linkCategories بنفس هيكل المحاضرة بالظبط (category / icon / description / links[] فيها t و d و icon و actions[]) وبتظهر تحت عنوان 🔗 روابط ومصادر بنفس كروت المحاضرة. الروابط غير الصالحة بتتشال.
+📌 audio و videos و linkCategories مبيظهروش لو حالة السكشن soon أو unavailable، ولو مفيش أي واحد منهم مبيظهرش أي حاجة.
+
+5.9) 🎙️ تفريغ صوت السكشن
+json
+"transcript": { "pdf": "datenew/subjects/{slug}/sections/x-transcript.pdf", "text": "نص التفريغ..." }
+"transcript": "نص التفريغ مباشرة"                                                   ← اختصار للنص فقط
+📌 pdf و text الاتنين اختياريين — اكتب واحد منهم أو الاتنين:
+   • نص فقط → بيظهر النص مفتوح تحت عنوان 🎙️ تفريغ صوت السكشن.
+   • ملف فقط → بيظهر صف "ملف التفريغ" والطالب يضغط عليه يفتحه.
+   • الاتنين → صف الملف + زر 📖 قراءة التفريغ نصيًا لإظهار/إخفاء النص.
+📌 الملف في sections/ (مسار نسبي أو https://). مفتاح الملف pdf هو الأساسي، وبيقبل كمان pdfUrl أو file أو url.
+📌 لو مفيش pdf ولا text مبيظهرش أي حاجة، ولو حالة السكشن soon أو unavailable التفريغ مبيظهرش.
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 6: إضافة الأسئلة (MCQ + مقالي)
+6.1) 🅰️ سؤال اختيار من متعدد (MCQ)
+js
+{
+  q: "ما هو الـ Array؟",
+  options: [
+    "مصفوفة ثابتة الحجم",
+    "مصفوفة ديناميكية",
+    "نوع من المتغيرات",
+    "كل ما سبق"
+  ],
+  correct: 0,                       // ← الإجابة الصحيحة (يبدأ من 0)
+  translation: "What is an Array?",  // (اختياري)
+  explanation: "الـ Array مصفوفة...",  // (اختياري)
+  video: "https://youtu.be/XXXXXXXXXXX"  // (اختياري) — فيديو للسؤال
+}
+📌 قواعد مهمة
+correct يبدأ من 0 (مش 1): 0 = الأولى / 1 = التانية / 2 = التالتة / 3 = الرابعة
+عدد options لازم يكون 2 على الأقل (يُفضّل 4).
+correct لازم يكون بين 0 و options.length - 1.
+
+6.2) 🅱️ سؤال مقالي (Essay)
+js
+{
+  type: "essay",                    // ← إجباري
+  q: "اشرح الفرق بين Stack و Queue",
+  answer: `الإجابة النموذجية الكاملة...
+
+يمكن استخدام أسطر متعددة.`,
+  tags: ["مهم", "فصل 2"],            // (اختياري)
+  ref: "المرجع: الكتاب ص 45",        // (اختياري)
+  translation: "Explain...",         // (اختياري)
+  explanation: "السبب...",           // (اختياري)
+  video: { t: "شرح السؤال", url: "https://..." }  // (اختياري)
+}
+📌 إزاي بيتحسب في الدرجة؟
+الأسئلة المقالية مش بتتحسب في نسبة الدرجة، وبتظهر كـ 📝 مقالي: X في تفاصيل النتيجة.
+لو كل الامتحان مقالي: التصحيح يدوي.
+
+6.3) 🌐 الترجمة والشرح (اختياري لأي سؤال)
+🌐 ترجمة السؤال — زر قابل للطي (لوحة رمادية فاتحة)
+💡 لماذا هذه الإجابة؟ — زر قابل للطي (لوحة زرقاء فاتحة)
+🎬 فيديو السؤال — زر بيفتح المشغّل (مبيشتغلش إلا بالضغط) — شوف 8.7
+
+6.4) 📋📤 نسخ ومشاركة السؤال (تلقائي — مفيش حاجة تكتبيها)
+فوق كل سؤال (اختياري أو مقالي) جنب زر ⭐ علّم فيه زرارين:
+📋 نسخ — بينسخ نص السؤال + الاختيارات + سطر "✅ الإجابة الصحيحة: ..." (للمقالي: "✅ الإجابة النموذجية:" وتحتها الإجابة).
+📤 مشاركة — على الجوال بيفتح قائمة المشاركة بنفس النص + رابط الموقع. لو المتصفح مبيدعمش المشاركة بينسخ النص ويعرض رسالة.
+📌 الشرح والترجمة مش بيتضمنوا في النص المنسوخ، والزرارين مش موجودين في نسخة الـ HTML المستقلة.
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 7: إضافة الامتحانات والبنوك
+7.1) 📝 إضافة ميدتيرم
+الطريقة 1: امتحان بأسئلة مباشرة
+js
+midterms: [
+  {
+    t: "ميدتيرم 2024",
+    d: "امتحان الفصل الأول",
+    pdf: "datenew/subjects/{slug}/questions/midterm-2024.pdf",
+    questions: [
+      { q: "...", options: [...], correct: 0 }
+    ]
+  }
+]
+الطريقة 2: امتحان مبني من محاضرات (من غير تكرار أسئلة)
+js
+midterms: [
+  { t: "ميدتيرم شامل", d: "كل أسئلة المحاضرات 1-5", lectures: [0, 1, 2, 3, 4] }   // ← أرقام المحاضرات
+]
+الطريقة 3: امتحان مقسّم فئات
+js
+midtermsCategories: [
+  {
+    category: "امتحانات د. أحمد سمير",
+    icon: "👨‍🏫",
+    description: "ميدتيرمات المادة على يد د. أحمد",
+    items: [
+      { t: "ميدتيرم 2023", d: "...", pdf: "...", lectures: [0, 1] },
+      { t: "ميدتيرم 2023 (ب)", questions: [...] }
+    ]
+  }
+]
+📌 النظام بيعمل flatten تلقائيًا ويحوّلها لشكل مسطح مع تجميع بالفئات.
+
+7.2) 🎓 إضافة فاينل
+نفس منطق الميدتيرم بالظبط، بس في finalsCategories أو finals:
+js
+finalsCategories: [
+  {
+    category: "سنة 2023",
+    icon: "📅",
+    items: [
+      { t: "فاينل 2023", d: "أسئلة شاملة", pdf: "datenew/subjects/{slug}/questions/final-2023.pdf", lectures: [0, 1, 2] }
+    ]
+  }
+]
+
+7.3) 🏦 إضافة بنك أسئلة
+js
+testBanks: [
+  {
+    t: "Test Bank — كل المحاضرات",
+    d: "بنك أسئلة شامل للفاينل",
+    pdf: "datenew/subjects/{slug}/questions/test-bank-final.pdf",
+    questions: [
+      { q: "كم عدد طبقات OSI Model?", options: ["5", "6", "7", "8"], correct: 2 }
+    ]
+  },
+  { t: "بنك أسئلة Chapter 1", d: "كل أسئلة الفصل الأول", lectures: [0, 1] }   // ← من محاضرات
+]
+
+7.4) 📌 إضافة PDF للامتحان
+أي امتحان/بنك فيه pdf: "..." بيظهر له زر "📄 تحميل الامتحان PDF".
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 8: الملخص والملاحظات والروابط وتفريغ الصوت
+8.1) 📄 ملخص المحاضرة
+summary: { pdf: "datenew/subjects/{slug}/lectures/x-summary.pdf" }          ← PDF فقط
+summary: { text: `الملخص النصي...` }                                       ← نص فقط
+summary: { pdf: "...", text: "نص مختصر" }                                  ← الاتنين (زر 📖 قراءة الملخص نصيًا)
+
+8.2) 📝 الملاحظات/التكاليف
+js
+notes: `📌 تكاليف المحاضرة:
+1. حل التمرين ص 12
+2. قراءة الفصل الثالث`
+بطاقة صفراء تحت رأس المحاضرة، وأول 60 حرف بيظهروا في بطاقة المحاضرة بالقائمة.
+
+8.3) 🔗 الروابط
+الشكل البسيط:    links: [ { t: "🎥 تسجيل", d: "...", url: "https://..." } ]
+الشكل المتقدم (أزرار):
+js
+links: [
+  {
+    t: "📂 مواد المحاضرة", d: "اختر من الأزرار", icon: "📚",
+    actions: [
+      { label: "مشاهدة", url: "https://...", type: "view",     color: "blue" },
+      { label: "تحميل",  url: "https://...", type: "download", color: "green" }
+    ]
+  }
+]
+
+8.4) 🗂️ فئات الروابط (Link Categories)
+js
+linkCategories: [
+  {
+    category: "📚 كتب ومراجع", description: "كتب المادة الأساسية", icon: "📚",
+    links: [
+      { t: "الكتاب الأساسي", d: "PDF كامل", url: "https://..." },
+      { t: "Tanenbaum", d: "مرجع", actions: [ { label: "الموقع", url: "https://...", type: "view", color: "blue" } ] }
+    ]
+  }
+]
+📌 لو المحاضرة مفيهاش أي روابط (links / linkCategories) قسم 🔗 روابط المحاضرة بيتخفي كله، وترقيم الأقسام بيتظبط لوحده.
+
+8.5) 📖 الفصول (Chapters)
+الطريقة 1 (مصفوفة chapters على مستوى المادة):
+js
+chapters: [
+  { t: "الفصل الأول: الأساسيات", icon: "📘", description: "مقدمة", lectures: [0, 1, 2], open: false },
+  { t: "الفصل الثاني: المتقدم",   icon: "📗", lectures: [3, 4, 5], open: true  }
+]
+الطريقة 2 (على مستوى المحاضرة): lectures: [ { t: "محاضرة 1", chapter: "الفصل الأول", ... } ]
+كل فصل بيظهر أكورديون. open: true / false على الفصل بيحدد هل يبدأ مفتوح ولا مقفول (يشمل الفصل الأول). لو open مش مكتوب على أي فصل: الأول بيفتح تلقائيًا والباقي مقفول.
+📌 open بيحدد الحالة الأولية بس؛ لو الطالب فتح أو قفل فصل بنفسه بيتحفظ اختياره لحد ما يعمل ريفريش. وبيشتغل مع chapters[] فقط (مش مع chapter: "اسم" على المحاضرة).
+
+8.6) 🎧 التسجيل الصوتي للمحاضرة
+js
+audio: "datenew/subjects/{slug}/lectures/x-part1.mp3"                                  ← تسجيل واحد
+audio: [ { t: "الجزء الأول", url: "..." }, { t: "الجزء الثاني", url: "..." } ]       ← أكتر من تسجيل
+📌 بيظهر في صفحة المحاضرة بس، ومبيتحمّلش ولا بيشتغل إلا لما الطالب يضغط تشغيل، وبيقف لما يخرج من المحاضرة. لو مفيش audio مبيظهرش أي حاجة.
+📌 لازم ملف صوت مباشر (mp3 / m4a / ogg) برابط https:// أو مسار نسبي — روابط Google Drive العادية غالبًا مبتشتغلش.
+📌 التسجيل الصوتي للسكشن في 5.8.
+
+8.7) 🎬 فيديوهات المحاضرة وفيديو السؤال
+js
+videos: [ { t: "حل أسئلة الجزء الأول", url: "https://youtu.be/XXXXXXXXXXX" } ]        ← على مستوى المحاضرة (أو video: "رابط")
+{ q: "...", options: [...], correct: 0, video: "https://youtu.be/XXXXXXXXXXX" }      ← على مستوى السؤال (MCQ أو مقالي)
+video: { t: "شرح السؤال", url: "..." }   أو   video: [ { t, url }, { t, url } ]
+📌 فيديوهات المحاضرة بتظهر في كارت 🎬 أعلى صفحة المحاضرة. فيديو السؤال بيظهر تحت نص السؤال وقبل الاختيارات (في المحاضرة والميدتيرم والفاينل وبنوك الأسئلة).
+📌 مبيتحمّلش ولا بيشتغل إلا بالضغط، وبيتقفل بزرار إغلاق. لو الطالب اختار إجابة بعد تشغيل فيديو السؤال، السؤال بيتعاد رسمه والفيديو بيتقفل.
+📌 الأنواع المدعومة: YouTube / Google Drive (الملف مشارك للكل) / Vimeo / ملف mp4 أو webm مباشر — برابط https:// أو مسار نسبي.
+📌 فيديو يوتيوب بيتحمّل عن طريق youtube-nocookie ومعاه عنوان موقعك (origin) وسياسة Referer، عشان يتجنب خطأ 153. وأول ما الفيديو يفتح بيظهر تحته رابط "↗ لو الفيديو مش بيشتغل هنا، افتحه على يوتيوب" (وكذلك Drive / Vimeo) للفيديوهات اللي صاحبها مانع تضمينها.
+📌 فيديوهات السكشن في 5.8.
+
+8.8) 🎙️ تفريغ صوت المحاضرة
+js
+transcript: { pdf: "datenew/subjects/{slug}/lectures/x-transcript.pdf" }                 ← ملف فقط
+transcript: { text: `تفريغ الصوت النصي...` }                                            ← نص فقط
+transcript: { pdf: "...", text: "نص التفريغ" }                                         ← الاتنين (زر 📖 قراءة التفريغ نصيًا)
+transcript: `النص مباشرة`                                                              ← اختصار للنص فقط
+📌 بيظهر في صفحة المحاضرة كقسم مستقل 🎙️ تفريغ صوت المحاضرة (بعد الملخص وقبل الأسئلة) بنفس شكل الملخص، وبيتحمّل الملف بس لما الطالب يفتح القسم.
+📌 مفتاح الملف pdf هو الأساسي، وبيقبل كمان pdfUrl أو file أو url. الرابط لازم https:// أو مسار نسبي، وأي رابط غير صالح بيتتجاهل.
+📌 الشارة (chip) على القسم بتكتب تلقائي: «ملف» أو «نص» أو «ملف + نص».
+📌 لو مفيش pdf ولا text القسم بيتخفي، وترقيم الأقسام بيتظبط لوحده.
+📌 تفريغ صوت السكشن في 5.9 (نفس الشكل جوه بيانات السكشن).
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 9: الإشعارات والإعلانات — كيف تضيف إشعار لأي حاجة
+9.1) 🔔 فهم النظام
+- بتتحفظ في localStorage تحت notifications_data — الحد الأقصى 50 إشعار (الأقدم بيتشال).
+- كل إشعار: id (تلقائي) / title / read / time / date / type.
+- ⚠️ الإشعارات والمقروء متخزنة على جهاز الطالب (مش مشتركة بين الأقسام ولا الأجهزة).
+- استيراد النسخة الاحتياطية بيدمج الإشعارات: بيضيف اللي مش موجود بس (المقارنة بالمحتوى) وبيسيب الحالية، والحد الأقصى برضه 50.
+- المصفوفات الثابتة في app.js (answerEditsLog / lecturesAddedLog / announcementsLog) بتتقارن بمفاتيح "اللي اتشاف" في localStorage، وبتضيف الجديد بس لكل طالب.
+
+📌 أنواع الإشعارات الجاهزة
+النوع	الدالة	المصفوفة الثابتة	مفتاح "اللي اتشاف"
+info	addNotification()	—	—
+audit	addAuditLog()	answerEditsLog	seen_system_edits
+lecture_added	addLectureAddedLog()	lecturesAddedLog	seen_added_lectures
+announcement	addAnnouncementLog()	announcementsLog	seen_announcements
+
+9.2) 📢 إشعار عام (Info) — من Console أو الكود
+js
+addNotification({
+  type: "info",
+  title: "📢 ميدتيرم المادة اتأجل للأسبوع الجاي",
+  context: "مادة Computer Graphics",
+  questionText: "الامتحان بقى يوم 15 بدل 8"
+});
+
+9.3) 📝 إشعار تعديل إجابة سؤال (answerEditsLog في app.js، سطر ~288)
+js
+var answerEditsLog = [
+  {
+    id: "edit-001",                  // ← فريد
+    context: "المحاضرة الأولى",
+    questionNum: 1,
+    questionText: "نص السؤال",
+    oldAnswer: "الإجابة القديمة",
+    newAnswer: "الإجابة الصحيحة"
+  }
+];
+(حاليًا المصفوفة فاضية.)
+
+9.4) 📚 إشعار إضافة محاضرة جديدة (lecturesAddedLog، سطر ~298)
+js
+var lecturesAddedLog = [
+  { id: "lec-001", subject: "الرسم بالحاسب", lectureTitle: "المحاضرة 3", lectureDesc: "" }
+];
+⚠️ عنصر lec-001 موجود فعلًا في النسخة الحالية (هيظهر لكل طالب جديد). عند إضافة محاضرة جديدة: ضيف id جديد (lec-002 ...).
+ملاحظة: الإشعار مش مربوط بقسم — هيظهر لكل الأقسام. اكتب اسم المادة بوضوح.
+
+9.5) 📣 إعلانات الإشعارات (announcementsLog، سطر ~311) — جديد
+js
+var announcementsLog = [
+  { id: "ann-001", title: "⏰ تم تأجيل امتحان الميدتيرم", message: "الموعد الجديد الأحد 20/10." }
+];
+⚠️ النسخة الحالية فيها 3 إعلانات تجريبية (ann-001 .. ann-003) هتظهر لأي طالب جديد — احذفها أو عدّلها قبل النشر.
+⚠️ الإعلان بيظهر مرة واحدة لكل جهاز (بيتسجل id في seen_announcements). لو عايز تعيد إظهاره، غيّر الـ id.
+
+9.6) 💡 فرق مهم: إشعارات الكود vs إعلانات الشيت
+- announcementsLog (في app.js): يحتاج تعديل ونشر الكود، بيظهر في جرس الإشعارات.
+- tab=announcements (Google Sheets): بيتعدل من الشيت من غير نشر، وبيظهر كـ "إعلان هام" في صفحة الجدول (الجزء 10).
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 10: الجدول الدراسي (Google Sheets)
+بيتحمّل من /api/sheet?tab=schedule و announcements و deadlines (التلات بالتوازي).
+⚠️ الجدول بيتصفّى بالـ program (القسم) والـ section — اكتب قيمة program بنفس مسميات الأقسام اللي في الشيت.
+
+10.1) 📅 صف الجدول
+العمود	الوصف	القيم الممكنة
+id	معرّف فريد	نص فريد
+day	اليوم	Saturday / Sunday / Monday / Tuesday / Wednesday / Thursday / Friday
+start	البداية	09:00 (HH:MM)
+end	النهاية	11:00
+course_name_ar	اسم المادة	نص
+type	النوع	lecture / section / lab / exam / other
+status	الحالة	cancelled / moved / online / makeup (أو فارغ)
+instructor	الدكتور/المعيد	نص
+location	المكان	نص
+notes	ملاحظات	نص
+program	القسم/البرنامج	نص
+section	رقم السكشن	1, 2 أو "1 2"
+effective_from	ساري من	2026-01-01 (اختياري)
+effective_to	ساري لـ	2026-06-30 (اختياري)
+
+10.2) 📢 إعلان هام (tab=announcements)
+json
+{ "title": "⚠️ تأجيل محاضرة", "body": "اتأجلت للسبت الجاي", "link": "https://...", "priority": "important", "publish_at": "2026-01-01", "expires_at": "2026-12-31" }
+- priority لازم يكون important عشان يظهر.
+- link لازم https:// عشان يظهر كزر.
+
+10.3) ⏰ موعد تسليم (tab=deadlines)
+json
+{ "title": "تسليم مشروع الرسم", "type": "project", "course_code": "CG301", "due_at": "2026-03-15 23:59", "location": "C305", "notes": "ورق + إلكتروني" }
+الأنواع: assignment (تسليم) / quiz / midterm / final / project
+التاريخ: YYYY-MM-DD HH:MM (الافتراضي 23:59)
+البادج: 🔴 عاجل (< 24 ساعة) — 🟡 قريب (< 3 أيام)
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 11: القوالب الفارغة للنسخ السريع
+11.1) 📋 قالب محاضرة فارغ
+js
+{
+  id: "SUBJ-lecture-NN",
+  t: "المحاضرة [رقم] — [العنوان]",
+  d: "[وصف مختصر]",
+  pdf:  "datenew/subjects/SUBJ/lectures/[filename].pdf",
+  pdf2: "datenew/subjects/SUBJ/questions/[filename]-questions.pdf",
+  sectionTitle: "🧩 سكاشن [المحاضرة]",
+  audio: [ { t: "[العنوان]", url: "datenew/subjects/SUBJ/lectures/[audio].mp3" } ],
+  videos: [ { t: "[العنوان]", url: "https://..." } ],
+  links: [ { t: "🎥 تسجيل الفيديو", url: "https://..." } ],
+  linkCategories: [],
+  questions: [
+    { q: "[سؤال MCQ]", options: ["أ","ب","ج","د"], correct: 0, translation: "[English]", explanation: "[الشرح]", video: { t: "[العنوان]", url: "https://..." } },
+    { type: "essay", q: "[سؤال مقالي]", answer: "[الإجابة النموذجية]", tags: ["tag1"], ref: "[المرجع]" }
+  ],
+  notes: "[ملاحظات وتكاليف]",
+  summary: { pdf: "datenew/subjects/SUBJ/lectures/[summary].pdf", text: "[ملخص نصي]" },
+  transcript: { pdf: "datenew/subjects/SUBJ/lectures/[transcript].pdf", text: "[تفريغ صوت المحاضرة]" }   // اختياري: pdf أو text أو الاتنين
+}
+
+11.2) 📋 قالب سكشن فارغ
+json
+{
+  "id": "SUBJ-sec-NN",
+  "subject": "SUBJECT-SLUG",
+  "lectureId": "SUBJ-lecture-NN",
+  "lecture": "[نفس عنوان المحاضرة]",
+  "instructorId": "inst-XXX",
+  "instructorName": "م./د. [الاسم]",
+  "groupName": "سكشن [A/B/...]",
+  "status": "available",
+  "sectionTitle": "🧩 سكاشن [المحاضرة]",
+  "notes": "[ملاحظات المعيد]",
+  "materials": {
+    "file":      { "label": "ملف السكشن",   "url": "datenew/subjects/SUBJ/sections/[file].pdf",      "type": "pdf" },
+    "exercises": { "label": "تمارين",        "url": "datenew/subjects/SUBJ/sections/[exercises].pdf", "type": "pdf" },
+    "solution":  { "label": "الحل النموذجي", "url": "datenew/subjects/SUBJ/sections/[solution].pdf",  "type": "pdf" },
+    "recording": "https://...",
+    "extraLinks": [ { "label": "[اسم الرابط]", "url": "https://..." } ]
+  },
+  "extraFiles": [ { "label": "[ملف إضافي]", "url": "datenew/subjects/SUBJ/sections/[file].pdf", "type": "pdf" } ],
+  "audio": [ { "t": "[العنوان]", "url": "datenew/subjects/SUBJ/sections/[audio].mp3" } ],
+  "videos": [ { "label": "[عنوان الفيديو]", "url": "https://..." } ],
+  "linkCategories": [ { "category": "[التصنيف]", "icon": "📚", "description": "[وصف]", "links": [ { "t": "[عنوان]", "d": "[وصف]", "actions": [ { "label": "[زر]", "url": "https://...", "type": "view", "color": "blue" } ] } ] } ],
+  "transcript": { "pdf": "datenew/subjects/SUBJ/sections/[transcript].pdf", "text": "[تفريغ صوت السكشن]" },
+  "task": { "title": "[عنوان الواجب]", "url": "datenew/subjects/SUBJ/sections/[task].pdf", "dueDate": "YYYY-MM-DD", "notes": "[تعليمات التسليم]" }
+}
+
+11.3) 📋 قالب عنصر في subjects-index.js
+js
+{ slug: "SLUG", name: "Name", en: "الاسم", icon: "📚",
+  file: "datenew/subjects/SLUG/SLUG.js",
+  sectionsFile: "datenew/subjects/SLUG/sections-SLUG.json",
+  active: true }
+
+11.4) 📋 قالب قسم في departments.js
+js
+{ id: "xx", name: "اسم القسم", en: "Department", icon: "🎓", index: "datenew/xx/subjects-index.js", active: true }
+
+11.5) 📋 اختصارات النسخ
+القيمة	انسخ
+حالة "متاح" / "قريبًا" / "غير متاح"	"available" / "soon" / "unavailable"
+نوع زر	"view" / "download"
+لون زر	"blue" / "green" / "orange" / "red"
+نوع سؤال مقالي	"essay"
+معيد	inst-ahmed / inst-sara / inst-mohamed (أمثلة — استخدم IDs معيديك الفعلية)
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 12: شرح كل الحقول
+12.1) 🎯 حقول المادة (الجذر)
+الحقل	النوع	إجباري	ملاحظات
+name	string	✅	يظهر للمستخدم (وبيتخزن تقدّم الطالب باسمه — ما تغيّرهوش بعد النشر!)
+en	string	❌	الاسم تحت العنوان
+icon	string	❌	emoji
+chapters[]	array	❌	{t, icon, description, open, lectures:[0,1,2]} — open: true/false = الحالة الأولية
+lectures[]	array	✅	مصفوفة محاضرات
+midterms[] / midtermsCategories[]	array	❌	امتحانات
+finals[] / finalsCategories[]	array	❌	امتحانات
+testBanks[]	array	❌	بنوك أسئلة
+linkCategories[]	array	❌	مصادر عامة
+
+12.2) 🎯 حقول عنصر الفهرس (subjects-index.js)
+الحقل	إجباري	ملاحظات
+slug	✅	فريد ومطابق لاسم المجلد
+name	✅	اسم الزر في الشريط
+en	❌	النص تحت الاسم
+icon	❌	emoji
+file	✅	مسار ملف المادة (.js)
+sectionsFile	✅ عمليًا	مسار JSON السكاشن — اكتبه صراحةً (شوف الجزء 19)
+sectionTitle	❌	عنوان قسم السكاشن
+active	❌	false = مخفي
+
+12.3) 🎯 حقول القسم (departments.js)
+id / name / en / icon / index / active (شوف الجزء 2).
+
+12.4) 🎯 حقول السكشن، materials، task، أنواع الأسئلة، أنواع الروابط
+زي ما هي في الجزء 5 والجزء 6 والجزء 8.
+
+12.5) 🎯 حقل transcript (محاضرة + سكشن)
+المفتاح	النوع	إجباري	ملاحظات
+pdf	url/path	❌	ملف التفريغ (بيقبل كمان pdfUrl / file / url)
+text	string	❌	نص التفريغ (بيدعم أسطر متعددة)
+(string مباشر)	string	❌	اختصار: transcript: "نص" = {text: "نص"}
+📌 لازم واحد على الأقل (pdf أو text) وإلا القسم بيتخفي. المحاضرة: شوف 8.8 — السكشن: شوف 5.9.
+الألوان: green, orange, red, blue — الأنواع: view, download.
+أي رابط خارجي لازم https:// (الأرقام http:// بتتتجاهل).
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 13: الأخطاء الشائعة وكيفية تجنبها
+❌ 1) نسيان الفاصلة بين العناصر → فاصلة بعد كل عنصر ما عدا الأخير.
+❌ 2) تكرار id داخل نفس المادة → كل id فريد.
+❌ 3) عدم تطابق lectureId بين السكشن والمحاضرة.
+❌ 4) subject غير مطابق لـ slug (computer-network ≠ computer-networks).
+❌ 5) نفس المعيد بـ IDs مختلفة (هيظهر شخصين) / معيدين مختلفين بنفس الـ ID.
+❌ 6) JSON غير صالح (فاصلة زائدة قبل } ) → JSONLint.
+❌ 7) MCQ بدون correct أو correct أكبر من عدد options.
+❌ 8) روابط http:// بدل https://.
+❌ 9) 🆕 مسارات قديمة: datenew/{slug}/... أو files/... → الصح datenew/subjects/{slug}/lectures|questions|sections/...
+❌ 10) 🆕 نسخ مادة مشتركة لقسم تاني بدل الإشارة لنفس الملف → خلّي ملف واحد في subjects/ بس.
+❌ 11) 🆕 نسيان إضافة المادة لفهرس القسم (المادة موجودة بس مش بتظهر) → ضيفها في subjects-index.js بتاع القسم.
+❌ 12) 🆕 slug الفولدر ≠ slug الفهرس ≠ subject في JSON السكاشن.
+❌ 13) 🆕 نسيان sectionsFile → التطبيق هيدوّر على مسار قديم ومش هيلاقي السكاشن (الجزء 19).
+❌ 14) 🆕 قسم id في departments.js مختلف عن اسم فولدر القسم (cs / is / se / ai).
+❌ 15) 🆕 تغيير name المادة بعد النشر → تقدّم الطلاب (qa_ / quiz_progress_ / qmark_) بيضيع لأنه مربوط بالاسم.
+❌ 16) 🆕 ملف سكشن (تمارين/حل/واجب) محطوط في lectures/ أو questions/ بدل sections/ → انقله وحدّث المسار في JSON السكاشن.
+❌ 17) 🆕 حروف كبيرة أو مسافات في أسماء الملفات (Vercel حساس لحالة الحروف على Linux).
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 14: URL Routing والميزات
+14.1) 🌐 الروابط
+الرابط	يفتح
+/	القسم المحفوظ، وأول مادة نشطة (أو يطلب اختيار قسم لو أول زيارة)
+?dept={id}	🆕 يختار القسم ويحفظه
+?subject={slug}	مادة معينة (لازم تكون في فهرس القسم الحالي)
+?subject={slug}&lecture={id}	محاضرة معينة
+?page=schedule	الجدول الدراسي
+?page=dashboard أو ?page=progress	ملخص التقدم
+?page=myschedule (أو ?view=schedule القديم)	جدولي الشخصي
+⚠️ لو الـ subject مش موجود في فهرس القسم الحالي → تظهر صفحة "غير موجود". للمشاركة استخدم ?dept=..&subject=..
+
+14.2) ✨ الميزات
+🔔 مركز إشعارات (تعديل إجابات / محاضرات جديدة / إعلانات)
+💾 نسخة احتياطية: تصدير/استيراد التقدم
+📈 ملخص التقدم لكل المواد
+📌 جدولي الشخصي + كشف تعارضات
+👨‍🏫 دليل الدكاترة (أكورديون بالأيام)
+🗺️ خريطة الأسئلة + تعليم ⭐ (على الموبايل: شريط أرقام بسكرول أفقي)
+🎧🎬 تسجيل صوتي (محاضرة / سكشن) + فيديوهات (محاضرة / سؤال / سكشن) — بتشتغل بالضغط بس
+📋📤 نسخ ومشاركة أي سؤال مع الإجابة الصحيحة
+📄 PDF Annotator (قلم/تظليل/دمج تعديلات) — pdf-annotator.html
+💬 نموذج الاقتراحات (reCAPTCHA + صور + حد 5/يوم)
+🔍 بحث شامل
+📥 تحميل Word للأسئلة الغلط/المعلّمة
+📥 HTML مستقل (نسخة أسئلة بدون إنترنت)
+🎨 4 ثيمات: morning / noon / afternoon / night + auto
+📴 Offline للملفات المفتوحة سابقًا (sw.js)
+📱 PWA قابل للتثبيت
+🎓 🆕 اختيار القسم + تغييره من الشريط
+
+14.3) 🎯 الثيمات (auto)
+morning 6:00–11:59 / noon 12:00–14:59 / afternoon 15:00–17:59 / night 18:00–5:59
+
+14.4) 💾 مفاتيح localStorage
+المفتاح	المحتوى
+dept_v1	🆕 القسم المختار
+themeMode	auto / noon / night ...
+last_open_state_{dept}	آخر صفحة/مادة/محاضرة (لكل قسم)
+qa_{subjectName}_{key}	إجابات الأسئلة
+quiz_progress_{subjectName}	النتائج
+qmark_{subjectName}_{key}	الأسئلة المعلّمة ⭐
+notifications_data	الإشعارات
+seen_system_edits / seen_added_lectures / seen_announcements	ما تم عرضه من السجلات الثابتة
+opened_files_v1	الملفات المفتوحة (offline)
+cg_sections_v1	حالة أقسام PDF/أسئلة
+sd.my.v1 / sd.my.confirmed.v1	جدولي الشخصي / المعتمد
+sd.insOpenDays	حالة أكورديون الأيام
+sd.cache.v1 / sd.prog / sd.sec	كاش وفلاتر الجدول
+fb_rate_limit_v1	حد الاقتراحات اليومي
+pdfqalam:*	رسومات PDF
+mainTitle_{dept} / sbHtml_{dept} / sbH_m / sbH_d	تحسين الأداء (CLS)
+
+14.5) 💾 اللي بيتضمن في النسخة الاحتياطية
+المفاتيح الثابتة (PROGRESS_KEYS):
+dept_v1, last_open_state, themeMode, notifications_data, cg_sections_v1, seen_system_edits, seen_added_lectures, seen_announcements, sd.insOpenDays
+البادئات (PROGRESS_PREFIXES):
+last_open_state_, qa_, quiz_progress_, qmark_, pdfqalam:
+الحد: 5 ميجا (BACKUP_MAX_BYTES).
+الاستيراد: notifications_data بتتدمج (يضيف المختلف بس ويسيب الحالي، المقارنة بالمحتوى مش بالـ id، والمقروء يفضل مقروء، الحد 50) وكذلك seen_system_edits / seen_added_lectures / seen_announcements (اتحاد). باقي المفاتيح بتتكتب من النسخة.
+لو ضفت مفتاح جديد: ضيفه في PROGRESS_KEYS (أو بادئة في PROGRESS_PREFIXES) في app.js (قسم 22).
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 15: API Endpoints
+15.1) 🔹 POST /api/feedback
+Body: { channel, type, name, contactType, contactValue, ref, text, images:[{name,type,data}], recaptchaToken }
+الحدود: 5 رسائل/يوم/جهاز — 5 صور (1MB لكل صورة) — 4MB إجمالي — reCAPTCHA v2 إجباري.
+Response: { ok: true } أو { ok:false, code: CAPTCHA_FAILED | RATE | BIG | INVALID | HONEYPOT | CONFIG }
+الكود	يظهر للطالب
+CAPTCHA_FAILED	🔒 فشل التحقق الأمني
+RATE	⏳ الخادم رفض الطلب — حاولت كتير
+CONFIG	⚙️ الإرسال لسه مش مفعّل
+INVALID	📝 راجع البيانات
+BIG	📦 الصور كبيرة
+HONEYPOT	🤖 تم رفض الطلب
+
+15.2) 🔹 GET /api/sheet?tab={schedule|announcements|deadlines}
+Response: { ok:true, items:[...] }
+
+15.3) 📌 reCAPTCHA
+في app.js (سطر ~3534): var RECAPTCHA_SITEKEY = "6LermOYtAAAAAMpI8j0HXVM3v8IZdKKflFw1w3be";
+(المفتاح تغيّر عن النسخة القديمة من الدليل.) السيكرت كي في Vercel Environment Variables.
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 16: ملفات النشر والـ PWA (جديد)
+(ملاحظة: الملفات دي شفتها كأيقونات في الفولدر فقط — محتواها مش متراجع هنا، فالوصف حسب الدور المتوقع. راجع كل ملف قبل الاعتماد.)
+
+الملف	الدور
+vercel.json	إعدادات Vercel: الـ headers / rewrites / كاش الملفات الثابتة
+.vercelignore	يمنع رفع ملفات مش لازمة للإنتاج (indexV0.html / README.md / NAMING.md / ... إلخ)
+package.json	سكريبت build بيشغّل build-version
+build-version.cjs	بيولّد رقم إصدار عند كل بناء (بيستخدمه sw.js لتجديد الكاش)
+sw.js	Service Worker: كاش + Offline. أي تغيير كبير في الملفات لازم يغيّر الإصدار
+pwa.js	تسجيل sw.js + زر التثبيت (بيتحمّل بعد 1.2 ثانية من load)
+manifest.webmanifest	اسم التطبيق/الأيقونات/الألوان
+.github/CODEOWNERS	مين مراجع أي مجلد (مثلًا datenew/ai/ و datenew/subjects/machine-learning/)
+NAMING.md	قواعد التسمية (slugs / ids / ملفات)
+README.md	تعريف المشروع
+
+📌 بعد أي تعديل في الداتا (محاضرة/سكشن/PDF): اعمل push → Vercel بيبني تلقائيًا. لو الطلاب شايفين نسخة قديمة: تأكد إن رقم الإصدار اتغيّر (sw.js) وإن الكاش اتجدد.
+📌 Vercel Insights بيتحمّل متأخر بعد 3 ثواني (/_vercel/insights/script.js).
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 17: قائمة فحص نهائية قبل النشر
+📋 الداتا
+□ datenew/departments.js فيه الأقسام الأربعة (ومسار index صحيح لكل قسم)
+□ كل قسم له datenew/{dept}/subjects-index.js
+□ عدد المواد: cs=5 / is=2 / se=5 / ai=6
+□ كل مادة في datenew/subjects/{slug}/ فيها: {slug}.js + sections-{slug}.json + lectures/ + questions/ + sections/
+□ المواد المشتركة بتشاور على ملف واحد (مفيش نسخ)
+□ sectionsFile مكتوب في كل مادة
+□ كل محاضرة لها id فريد / كل سكشن له id فريد
+□ instructorId موحّد / lectureId مطابق / subject مطابق
+□ كل مسارات الـ PDF بتبدأ بـ datenew/subjects/{slug}/
+□ كل JSON صالح
+□ مفيش أخطاء في Console
+□ transcript (لو مضاف): فيه pdf أو text، ومسار الملف صحيح (lectures/ للمحاضرة — sections/ للسكشن)
+□ تجربة الأقسام الأربعة: ?dept=cs / is / se / ai
+□ إعلانات/إشعارات الكود (announcementsLog / lecturesAddedLog) محدّثة ومفيش محتوى تجريبي
+📋 الوظائف
+□ اختيار القسم يظهر أول مرة ويتحفظ
+□ زر تغيير القسم يشتغل
+□ الثيمات الأربعة / شريط المواد / البحث / خريطة الأسئلة / ⭐ / Word
+□ تصدير/استيراد النسخة الاحتياطية
+□ جدولي الشخصي + الجدول + الإعلانات + المواعيد
+□ نموذج الاقتراحات + reCAPTCHA + الصور
+□ الإشعارات
+📋 PWA + Offline
+□ manifest.webmanifest / pwa.js / sw.js شغالين
+□ الأيقونات icons/icon-192.png و icon-512.png
+□ زر التثبيت
+□ الملفات المفتوحة تعمل offline
+□ رقم الإصدار اتجدد (build-version)
+📋 الأمان
+□ api/feedback.js مفعّل
+□ RECAPTCHA_SITEKEY صحيح و RECAPTCHA_SECRET في Vercel env
+□ SHEET_API_KEY في Vercel env
+□ CORS محدود
+□ index.html فيه noindex (موجود: robots noindex, nofollow)
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 18: حل المشاكل الشائعة
+المشكلة	السبب المحتمل	الحل
+شاشة "ملف الأقسام مش موجود"	datenew/departments.js ناقص/مسار غلط	تأكد إنه موجود ومربوط في index.html
+"فشل تحميل فهرس القسم"	index في departments.js غلط	صحّح المسار / اسم الفولدر
+نافذة اختيار القسم بتظهر كل مرة	localStorage معطّل أو id القسم غلط	تأكد من id و active
+المادة موجودة ومش بتظهر في القسم	مش مضافة لفهرس القسم	ضيفها في subjects-index.js
+"فشل تحميل الملف: ..."	file في الفهرس غلط	صحّح لـ datenew/subjects/{slug}/{slug}.js
+"الملف ما أضافش بيانات للمادة"	ملف المادة مش بيعمل subjects.push({...})	راجع أول/آخر الملف
+المحاضرة مش ظاهرة	خطأ JS	افتح Console
+السكشن مش بيظهر	lectureId أو subject غلط، أو sectionsFile ناقص	طابق + اكتب sectionsFile
+قسم السكشن مش ظاهر	ملف السكاشن مش موجود	أنشئ sections-{slug}.json
+الأسئلة مش ظاهرة	مفيش questions[]	أضفها
+المعيد ظاهر مرتين	instructorId مختلف	وحّد الـ ID
+الـ PDF مش بيفتح	مسار قديم أو حروف كبيرة	تحقق من lectures/ و questions/ و sections/
+الطلاب شايفين نسخة قديمة	كاش الـ Service Worker	غيّر الإصدار (build-version) وأعد النشر
+فيديو يوتيوب بيظهر خطأ 153	الصفحة مفتوحة كملف محلي (file://) أو vercel.json فيه Referrer-Policy: no-referrer / Cross-Origin-Embedder-Policy أو صاحب الفيديو مانع التضمين	افتح الموقع من رابط Vercel، وشيل الهيدرز دي، أو استخدم رابط "افتحه على يوتيوب" اللي بيظهر تحت الفيديو
+التسجيل الصوتي/الفيديو مبيشتغلش	رابط Drive مش مشارك للكل، أو الصوت مش ملف مباشر، أو الرابط مش https	شارك الملف للكل، واستخدم mp3 مباشر، وراجع الرابط
+خطأ JSON	فاصلة زائدة/ناقصة	JSONLint
+"وصلت للحد الأقصى" في الاقتراحات	حد 5/يوم	استنى لبكرة
+reCAPTCHA مش بتحمّل	مشكلة إنترنت	افتح النموذج تاني
+"الملف كبير جدًا" في الاستيراد	أكبر من 5 ميجا	نسخة أصغر
+🔧 أدوات: JSONLint / Chrome DevTools → Console / Network tab
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 19: ⚠️ ملاحظات فنية اكتُشفت في الكود (محتاجة مراجعة)
+دي حاجات لقيتها وأنا بقارن app.js و index.html بالهيكل الجديد:
+
+1) 🔴 مسار السكاشن التلقائي قديم (app.js، دالة secFileForSubject ~ سطر 2678)
+   الكود لسه بيبني: 'datenew/' + slug + '/sections-' + slug + '.json'
+   بينما الهيكل الجديد: datenew/subjects/{slug}/sections-{slug}.json
+   النتيجة: أي مادة من غير sectionsFile صريح في الفهرس مش هتلاقي سكاشنها.
+   الحل (واحد من اتنين):
+   أ) اكتب sectionsFile في كل مادة (موصى به دلوقتي)، أو
+   ب) عدّل السطر في app.js إلى:
+      return 'datenew/subjects/' + meta.slug + '/sections-' + meta.slug + '.json';
+
+2) 🟡 رسالة الخطأ في selectSubject (~ سطر 658) لسه بتقول "تأكدي إن الملف موجود في مجلد datenew/" — تقدر تعدّلها لـ datenew/subjects/.
+
+3) 🟡 تحسين الأداء (CLS) في index.html: السطرين ~1174 و ~1198 بيقروا المفتاحين mainTitle و sbHtml من غير اسم القسم،
+   بينما app.js بيحفظهم باسم القسم: mainTitle_{dept} و sbHtml_{dept} (سطر ~4630 و ~4639).
+   النتيجة: الاستعادة المبكرة بتفشل ومفيش تحسين فعلي. الحل: في index.html استخدم
+   localStorage.getItem('mainTitle_'+localStorage.getItem('dept_v1')) وبالمثل sbHtml.
+
+4) 🟡 lecturesAddedLog و announcementsLog فيهم محتوى تجريبي/فعلي (lec-001 و ann-001..003) هيظهر لأي طالب جديد — راجعهم قبل النشر.
+
+5) 🟡 canonical و og:url في index.html = https://fcal-third-year.vercel.app/ — اتأكد إنه الدومين النهائي (الدليل القديم كان على faclstudentd.vercel.app/indexV4).
+
+6) 🟡 الإشعارات (lecturesAddedLog / announcementsLog) مش مربوطة بقسم — هتظهر لكل الأقسام.
+
+7) 🟡 build-version: في هيكلك المكتوب اسمه build-version.js وعلى الجهاز ظاهر build-version.cjs — وحّد التسمية وتأكد إن package.json بيستدعي الاسم الصح.
+
+8) 🟡 تقدّم الطالب مربوط بـ name المادة (مش slug) — تغيير name بعد النشر بيضيّع تقدّم الطلاب في المادة دي.
+
+9) 🔵 indexV0.html ملف احتياطي قديم — لو مش محتاجه على الإنتاج اتأكد إنه في .vercelignore.
+
+10) 🔵 الفولدرات في الصورة بتظهر بأيقونة JS (لأن جواها ملفات JS) — طبيعي، بس لو فولدر مادة ظهر بأيقونة { } (زي software-engineering) معناه إن أول ملف فيه JSON، مش مشكلة.
+
+════════════════════════════════════════════════════════════
+
+📘 الجزء 20: ملحق — الإيموجي الموصى بها
+محاضرة 🎓 / سكشن 🧩 / فيديو 🎥 / PDF 📄 / تمارين 📝 / حل ✅ / ملخص 📝 / واجب 📌
+ملفات إضافية 📎 / رابط 🔗 / عربي 🇪🇬 / عالمي 🌍 / مرجع 📚 / أداة 🔧 / تسجيل صوتي 🎧 / فيديو سؤال 🎬
+ميدتيرم 📝 / فاينل 🎓 / بنك أسئلة 🏦 / فصل 📘 / تنبيه ⚠️ / جديد 🆕 / قديم 🕐
+قسم 🎓 / علوم حاسب 💻 / نظم معلومات 🗄️ / هندسة برمجيات 🏗️ / ذكاء اصطناعي 🤖
+
+📞 ملاحظات أخيرة
+✅ قبل أي إضافة كبيرة → commit / نسخة احتياطية
+✅ جرّب محليًا قبل الرفع (كل الأقسام الأربعة لو المادة مشتركة)
+✅ اتبع نفس النمط الموجود — متخترعش تنسيقات
+✅ لو حصلت مشكلة → افتح Console وابعت الخطأ
+✅ للأسئلة المقالية: type: "essay" + answer
+✅ كل الروابط الخارجية https://
+✅ اسم مجلد المادة = الـ slug = subject في JSON السكاشن
+✅ المادة المشتركة = ملف واحد + إشارة من كل قسم
+
+بالتوفيق! 🚀

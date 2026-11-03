@@ -1,17 +1,4 @@
 // api/webhook.js
-import {
-  redis,
-  redisConfigured,
-  rateLimit,
-  newCode,
-  hashCode,
-  otpGet,
-  otpSet,
-  tgSendPlain,
-  SID_RE,
-  OTP_MAX_SENDS,
-} from "./_otp.js";
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(200).send("Telegram Webhook API is running ✅");
@@ -40,22 +27,6 @@ export default async function handler(req, res) {
   if (!BOT_TOKEN || !MY_CHAT) {
     console.error("Missing TG_BOT_TOKEN / TG_CHAT_ID");
     return res.status(200).send("CONFIG_MISSING");
-  }
-
-  // ═════════════════════════════════════════════
-  // 🔑 تأكيد تليجرام للطلاب: /start <sid>
-  //    أي حد يقدر يبدأ ده (الطالب)، ومش بيدّيه أي صلاحية — بس بيستلم كود تأكيد.
-  //    لازم يتعالج قبل فحص "حسابك أنت فقط".
-  // ═════════════════════════════════════════════
-  const m = /^\/start(?:@\w+)?\s+(\S+)$/.exec(text);
-  if (m && SID_RE.test(m[1]) && message.chat && message.chat.type === "private") {
-    await handleOtpStart({
-      sid: m[1],
-      from: message.from || {},
-      chatId,
-      botToken: BOT_TOKEN,
-    });
-    return res.status(200).send("OK");
   }
 
   // 🔒 الأمان: البوت يرد على حسابك أنت فقط
@@ -235,59 +206,4 @@ function buildHelpMessage() {
     `🧹 /cls — مسح المحادثة\n` +
     `❓ /help — القائمة دي`
   );
-}
-
-// ═════════════════════════════════════════════
-// 🔑 ربط جلسة التأكيد بحساب تليجرام الطالب + إرسال الكود له
-// ═════════════════════════════════════════════
-async function handleOtpStart({ sid, from, chatId, botToken }) {
-  const reply = (t) => tgSendPlain(botToken, chatId, t);
-
-  if (!redisConfigured()) {
-    console.error("Redis env vars missing — OTP disabled");
-    return reply("⚠️ التأكيد مش متاح دلوقتي. جرّب بعد شوية.");
-  }
-
-  try {
-    const s = await otpGet(sid);
-    if (!s || s.type !== "telegram") {
-      return reply("⌛ الرابط ده انتهت صلاحيته. ارجع للموقع واطلب كود جديد.");
-    }
-
-    // الجلسة بتتربط بأول حساب يضغط Start — محدش تاني يقدر ياخدها
-    if (s.tg && String(s.tg.id) !== String(from.id)) {
-      return reply("⚠️ الرابط ده اتستخدم من حساب تاني. ارجع للموقع واطلب كود جديد.");
-    }
-    if ((s.sends || 0) >= OTP_MAX_SENDS) {
-      return reply("⚠️ وصلت للحد الأقصى لإرسال الكود. ارجع للموقع واطلب كود جديد.");
-    }
-
-    // حد لإعادة الإرسال: مرة كل 30 ثانية
-    const cool = await rateLimit(`rl:otp:tgcool:${sid}`, 1, 30);
-    if (!cool.allowed) {
-      return reply("⏳ استنى شوية قبل ما تطلب الكود تاني.");
-    }
-
-    const code = newCode();
-    s.codeHash = hashCode(sid, code);
-    s.sends = (s.sends || 0) + 1;
-    s.tg = {
-      id: from.id,
-      // يوزر تليجرام حروف/أرقام/_ بس — بنفلتر احتياطًا
-      username: from.username ? String(from.username).replace(/[^A-Za-z0-9_]/g, "").slice(0, 32) : "",
-    };
-    await otpSet(sid, s);
-
-    // عداد المحاولات يبدأ من الصفر مع كل كود جديد
-    await redis(["DEL", `otp:att:${sid}`]);
-
-    return reply(
-      `🔐 رمز التأكيد بتاعك: ${code}\n\n` +
-        `اكتبه في صفحة الاقتراحات في الموقع. صالح 10 دقايق.\n` +
-        `ما تشاركوش مع حد. لو إنت مطلبتش الكود ده، تجاهل الرسالة.`,
-    );
-  } catch (err) {
-    console.error("handleOtpStart error:", err);
-    return reply("⚠️ حصلت مشكلة مؤقتة. جرّب تاني بعد شوية.");
-  }
 }
