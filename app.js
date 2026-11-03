@@ -3864,6 +3864,43 @@ function __bootDept2() {
     return ios && !standalone;
   }
 
+  function isBrave() {
+    return navigator.brave && navigator.brave.isBrave
+      ? navigator.brave.isBrave().then(function (r) { return !!r; }).catch(function () { return false; })
+      : Promise.resolve(false);
+  }
+
+  function showHint(text) {
+    var bar = document.getElementById("push-bar");
+    if (!bar) return;
+    var h = document.getElementById("push-hint");
+    if (!h) {
+      h = document.createElement("div");
+      h.id = "push-hint";
+      h.style.cssText = "margin-top:8px;font-size:12px;line-height:1.8;white-space:pre-line;color:var(--text-secondary);";
+      bar.appendChild(h);
+    }
+    h.textContent = text;
+  }
+
+  function explainPushError(err) {
+    var name = (err && err.name) || "", msg = String((err && err.message) || "");
+    if (/^HTTP/.test(msg) || msg === "no key") {
+      showToast("\u26A0\uFE0F مشكلة في السيرفر — جرّب تاني بعد شوية");
+      return;
+    }
+    if (name === "NotAllowedError") {
+      showHint("الإشعارات مش مسموحة. اضغطي على أيقونة القفل/الأسد جنب العنوان وفعّلي الإشعارات.");
+      return;
+    }
+    // AbortError / "push service error" = خدمة الـ Push نفسها مقفولة في المتصفح
+    return isBrave().then(function (brave) {
+      showHint(brave
+        ? "متصفح Brave بيقفل خدمة الإشعارات افتراضيًا.\nافتحي: brave://settings/privacy\nوشغّلي: Use Google services for push messaging\nوبعدين أعيدي تشغيل المتصفح وجرّبي تاني."
+        : "المتصفح مش قادر يوصل لخدمة الإشعارات. اتأكدي إن خدمات Google Push مش مقفولة، أو جرّبي متصفح تاني.");
+    });
+  }
+
   function enablePush() {
     if (Notification.permission === "denied") {
       showToast("🚫 الإشعارات متقفلة من إعدادات المتصفح — فعّليها من هناك");
@@ -3879,11 +3916,10 @@ function __bootDept2() {
           });
         });
       }).then(sendSub).then(function () {
+        var h = document.getElementById("push-hint"); if (h) h.remove();
         showToast("✅ اتفعّلت إشعارات الجهاز");
       });
-    }).catch(function () {
-      showToast("⚠️ تعذّر تفعيل الإشعارات — جرّب تاني بعد شوية");
-    }).then(refreshBtn);
+    }).catch(explainPushError).then(refreshBtn);
   }
 
   function disablePush() {
