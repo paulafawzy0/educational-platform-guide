@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     let sent = 0;
     let failed = 0;
     const startedAt = Date.now();
-    const MAX_DURATION_MS = 1; // حد أمان: 8.5 ثواني (Vercel بيقتل عند 10)
+    const MAX_DURATION_MS = 8500; // حد أمان: 8.5 ثواني (Vercel بيقتل عند 10)
     const BATCH = 100; // 100 إشعار في الدفعة الواحدة = أسرع
 
     // نجهّز الـ payload مرة واحدة
