@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const allowedSecrets = (process.env.ADMIN_SECRET || "")
       .split(",")
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean);
 
     if (!token || !allowedSecrets.includes(token)) {
@@ -50,14 +50,19 @@ export default async function handler(req, res) {
     let sent = 0;
     let failed = 0;
     const startedAt = Date.now();
-    const MAX_DURATION_MS = 8500;  // حد أمان: 8.5 ثواني (Vercel بيقتل عند 10)
-    const BATCH = 100;  // 100 إشعار في الدفعة الواحدة = أسرع
+    const MAX_DURATION_MS = 1; // حد أمان: 8.5 ثواني (Vercel بيقتل عند 10)
+    const BATCH = 100; // 100 إشعار في الدفعة الواحدة = أسرع
 
     // نجهّز الـ payload مرة واحدة
-    const payload = JSON.stringify({ title, body, url: url || "/", type: type || "general" });
+    const payload = JSON.stringify({
+      title,
+      body,
+      url: url || "/",
+      type: type || "general",
+    });
     const pushOptions = {
-      TTL: 60 * 60 * 24 * 3,    // 3 أيام
-      urgency: "high"
+      TTL: 60 * 60 * 24 * 3, // 3 أيام
+      urgency: "high",
     };
 
     // نعالج المفاتيح على دفعات متوازية (Promise.all) عشان نسرع
@@ -71,7 +76,7 @@ export default async function handler(req, res) {
           processed: i,
           total: keys.length,
           remaining: keys.length - i,
-          message: "اتوقف لحد الوقت المسموح. كرّري الطلب عشان تكملي الباقي."
+          message: "اتوقف لحد الوقت المسموح. كرّري الطلب عشان تكملي الباقي.",
         });
       }
 
@@ -84,18 +89,28 @@ export default async function handler(req, res) {
             if (!subData || !subData.endpoint) return { ok: false, key };
 
             // فلترة حسب القسم
-            if (dept && dept !== "all" && subData.dept !== "all" && subData.dept !== dept) {
+            if (
+              dept &&
+              dept !== "all" &&
+              subData.dept !== "all" &&
+              subData.dept !== dept
+            ) {
               return { skipped: true };
             }
 
             const pushSubscription = {
               endpoint: subData.endpoint,
-              keys: typeof subData.keys === 'string'
-                ? JSON.parse(subData.keys)
-                : subData.keys
+              keys:
+                typeof subData.keys === "string"
+                  ? JSON.parse(subData.keys)
+                  : subData.keys,
             };
 
-            await webpush.sendNotification(pushSubscription, payload, pushOptions);
+            await webpush.sendNotification(
+              pushSubscription,
+              payload,
+              pushOptions,
+            );
             return { ok: true };
           } catch (err) {
             // 404 / 410 = الاشتراك انتهى، نمسحه
@@ -104,12 +119,13 @@ export default async function handler(req, res) {
             }
             return { ok: false, key };
           }
-        })
+        }),
       );
 
       for (const r of results) {
         if (r.ok) sent++;
-        else if (r.skipped) {} // تم تجاوزه حسب القسم
+        else if (r.skipped) {
+        } // تم تجاوزه حسب القسم
         else failed++;
       }
     }
@@ -118,7 +134,7 @@ export default async function handler(req, res) {
       success: true,
       sent,
       failed,
-      total: keys.length
+      total: keys.length,
     });
   } catch (err) {
     console.error("push-send error:", err);
