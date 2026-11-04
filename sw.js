@@ -1,5 +1,5 @@
 /* Service Worker — غيّري VERSION مع كل تعديل مهم: v1 → v2 → v3 ... */
-const VERSION = "v1793812340844";
+const VERSION = "v1793813343649";
 const CACHE = `study-platform-${VERSION}`;
 
 const APP_SHELL = [
