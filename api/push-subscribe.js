@@ -8,6 +8,7 @@ const redis = new Redis({
 });
 
 const ALLOWED = [
+  "https://faclstudentdcs.vercel.app",
   "https://fcal-third-year.vercel.app",
   "https://third-year-platform.pages.dev",
 ];
