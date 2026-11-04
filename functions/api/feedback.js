@@ -1,38 +1,37 @@
-// api/feedback.js
-// Serverless Function على Vercel — نسخة آمنة
-// يستقبل رسالة + صور + reCAPTCHA v2 ثم يرسلها إلى Telegram (+ Google Sheets)
-// المنطق كله في _feedback-core.js (مشترك مع Cloudflare) — هنا بس ربط Vercel (req/res و process.env).
+// functions/api/feedback.js
+// Cloudflare Pages / Workers Function - POST /api/feedback
+// نفس منطق Vercel بالظبط (مشترك في api/_feedback-core.js) — هنا بس ربط Cloudflare (Request/Response و context.env).
+//   ملحوظة: حفظ Google Sheets مش مفعّل هنا (زي النسخة القديمة). لتفعيله ابعتي sheets تتحمّل في Workers.
+import { handleFeedback } from "../../api/_feedback-core.js";
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "4mb",
-    },
-  },
-};
-import * as sheets from "./sheets.js";
-import { handleFeedback } from "./_feedback-core.js";
+export async function onRequest(context) {
+  const { request, env } = context;
 
-function getClientIP(req) {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff) {
-    return xff.split(",")[0].trim().slice(0, 45);
+  const contentType = String(request.headers.get("content-type") || "");
+  let body;
+  if (request.method === "POST" && contentType.includes("application/json")) {
+    try {
+      body = await request.json();
+    } catch {
+      body = null; // JSON غير صالح
+    }
   }
-  return (req.socket && req.socket.remoteAddress) || "unknown";
-}
-
-export default async function handler(req, res) {
-  // Security headers
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Cache-Control", "no-store");
 
   const r = await handleFeedback({
-    method: req.method,
-    contentType: req.headers["content-type"],
-    ip: getClientIP(req),
-    body: req.body,
-    env: process.env,
-    sheets,
+    method: request.method,
+    contentType,
+    ip: request.headers.get("cf-connecting-ip") || "unknown",
+    body,
+    env,
+    sheets: null,
   });
-  return res.status(r.status).json(r.json);
+
+  return new Response(JSON.stringify(r.json), {
+    status: r.status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    },
+  });
 }

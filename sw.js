@@ -1,5 +1,5 @@
 /* Service Worker — غيّري VERSION مع كل تعديل مهم: v1 → v2 → v3 ... */
-const VERSION = "v1793717724282";
+const VERSION = "v1793810663713";
 const CACHE = `study-platform-${VERSION}`;
 
 const APP_SHELL = [
@@ -217,4 +217,49 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
   // Google Drive وأي حاجة تانية بتعدي من غير تدخل
+});
+
+/* ==========================================================
+   الإشعارات (Web Push)
+   ========================================================== */
+self.addEventListener("push", (event) => {
+  let d = {};
+  try {
+    d = event.data ? event.data.json() : {};
+  } catch (e) {
+    d = { title: "إشعار جديد", body: event.data ? event.data.text() : "" };
+  }
+  const title = d.title || "إشعار جديد";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: d.body || "",
+      icon: new URL("./icons/icon-192.png", self.location.href).href,
+      badge: new URL("./icons/icon-192.png", self.location.href).href,
+      tag: d.tag || undefined,
+      dir: "rtl",
+      lang: "ar",
+      data: { url: d.url || "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(
+    (event.notification.data && event.notification.data.url) || "/",
+    self.location.origin,
+  ).href;
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((list) => {
+        for (const c of list) {
+          if (c.url.startsWith(self.location.origin) && "focus" in c) {
+            if ("navigate" in c) c.navigate(target).catch(() => {});
+            return c.focus();
+          }
+        }
+        return self.clients.openWindow(target);
+      }),
+  );
 });

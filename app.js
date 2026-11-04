@@ -1,3 +1,5 @@
+/* على Cloudflare Pages الـ API موجود على Vercel، فبنكلمه برابط كامل. على Vercel المسار نسبي زي ما هو */
+var API_BASE = /\.pages\.dev$/.test(location.hostname) ? "https://fcal-third-year.vercel.app" : "";
 var DEPT_KEY="dept_v1";function findDept(e){if("undefined"==typeof DEPARTMENTS||!e)return null;for(var t=0;t<DEPARTMENTS.length;t++)if(DEPARTMENTS[t].id===e&&!1!==DEPARTMENTS[t].active)return DEPARTMENTS[t];return null}function __resolveCurDept(){try{var e=new URLSearchParams(location.search).get("dept");if(e&&findDept(e))return localStorage.setItem(DEPT_KEY,e),e;var t=localStorage.getItem(DEPT_KEY);if(t&&findDept(t))return t}catch(e){}return null}var CUR_DEPT=__resolveCurDept(),DATA_TRIES=3,DATA_TIMEOUTS=[6e3,8e3,1e4],WEAK_NET=!1;function __wait(e){return new Promise(function(t){setTimeout(t,e)})}function __maxTries(){return!1===navigator.onLine?1:DATA_TRIES}function __netGet(e,t,n){return new Promise(function(a,r){var i=window.AbortController?new AbortController:null,s=!1,o=setTimeout(function(){if(!s){s=!0;try{i&&i.abort()}catch(e){}r(new Error("timeout"))}},n),c={};for(var d in t||{})c[d]=t[d];i&&(c.signal=i.signal),fetch(e,c).then(function(e){return e.text().then(function(t){return{status:e.status,ok:e.ok,text:t}})}).then(function(e){s||(s=!0,clearTimeout(o),a(e))}).catch(function(e){s||(s=!0,clearTimeout(o),r(e))})})}function __cacheMatch(e){try{if(window.caches)return caches.match(e,{ignoreSearch:!0}).catch(function(){})}catch(e){}return Promise.resolve(void 0)}function __notifyRetry(e,t){try{for(var n=document.querySelectorAll(".loader-text"),a=0;a<n.length;a++)n[a].textContent="📶 النت ضعيف… بنحاول تاني ("+e+"/"+t+")"}catch(e){}}function __enterWeakNetMode(){if(!WEAK_NET){WEAK_NET=!0;try{if(!document.body||document.getElementById("weaknet-bar"))return;var e=document.createElement("div");e.id="weaknet-bar",e.setAttribute("role","status"),e.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#111;color:#fff;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 4px 16px rgba(0,0,0,.35);direction:rtl";var t=document.createElement("span");t.textContent="📴 النت ضعيف — فتحنا النسخة المحفوظة على جهازك";var n=document.createElement("button");n.type="button",n.textContent="🔄 إعادة المحاولة",n.style.cssText="background:#fff;color:#111;border:0;border-radius:8px;padding:6px 12px;font-weight:bold;cursor:pointer;white-space:nowrap",n.onclick=function(){location.reload()},e.appendChild(t),e.appendChild(n),document.body.appendChild(e)}catch(e){}}}function userErrMsg(e){return e&&e.weakNet?e.message:"تعذّر تحميل المحتوى — ممكن تتأكد من اتصالك بالنت وتجرّب تاني."}function __scriptTag(e){return new Promise(function(t,n){var a=document.createElement("script");a.src=e,a.async=!0,a.onload=function(){t()},a.onerror=function(){a.parentNode&&a.parentNode.removeChild(a),n(new Error("load"))},document.head.appendChild(a)})}function __scriptFromCache(e){return __cacheMatch(e).then(function(e){if(!e)throw new Error("nocache");return e.text()}).then(function(e){var t=document.createElement("script");t.text=e,document.head.appendChild(t),t.parentNode&&t.parentNode.removeChild(t)})}function loadDataScript(e){var t=0,n=__maxTries();return function a(){var r=DATA_TIMEOUTS[Math.min(t,DATA_TIMEOUTS.length-1)];return t++,__netGet(e,null,r).then(function(t){if(!t.ok)throw new Error("HTTP "+t.status);return __scriptTag(e)}).catch(function(e){if(t<n)return __notifyRetry(t+1,n),__wait(800*t).then(a);throw e})}().catch(function(){return __scriptFromCache(e).then(function(){__enterWeakNetMode()})}).catch(function(){var e=new Error("📴 النت ضعيف ومفيش نسخة محفوظة من الملف ده على جهازك — ممكن تجرّب تاني لما النت يتحسن");throw e.weakNet=!0,e})}function loadJSONResilient(e,t){var n=0,a=__maxTries();return function r(){var i=DATA_TIMEOUTS[Math.min(n,DATA_TIMEOUTS.length-1)];return n++,__netGet(e,t,i).then(function(e){if(404===e.status)return e;if(!e.ok)throw new Error("HTTP "+e.status);return e}).catch(function(e){if(n<a)return __wait(800*n).then(r);throw e})}().catch(function(t){return __cacheMatch(e).then(function(e){if(!e)throw t;return e.text().then(function(e){return __enterWeakNetMode(),{status:200,ok:!0,text:e}})})})}function loadDeptIndex(e){return new Promise(function(t,n){var a=findDept(e);a?loadDataScript(a.index).then(function(){t(a)}).catch(n):n(new Error("قسم غير معروف"))})}function switchDept(e){if(findDept(e)){try{localStorage.setItem(DEPT_KEY,e)}catch(e){}location.href=location.pathname}}function deptBtnHtml(){var e=findDept(CUR_DEPT);return e?'<div class="dept-head"><span class="dept-head-ic">'+(e.icon||"🎓")+'</span><span class="dept-head-nm">'+esc(e.name)+'</span></div><button class="subj-btn dept-btn" onclick="showDeptPicker(true)" title="تغيير القسم" aria-label="تغيير القسم"><span>⇄</span><span>تغيير القسم</span></button>':""}function showDeptPicker(e){
   var n=document.getElementById("dept-picker");
   if(!n){
@@ -710,7 +712,7 @@ function pgOpenLecture(e, t) {
         (n.value = a[e] ? e : ""));
     }
     function w(e) {
-      return fetch("/api/sheet?tab=" + e, {
+      return fetch(API_BASE + "/api/sheet?tab=" + e, {
         headers: { Accept: "application/json" },
       })
         .then(function (e) {
@@ -2667,13 +2669,30 @@ function fbValidateAll() {
   var i = fbSanitize(n("fb-ref"), FB_MAX_REF),
     s = fbSanitize(n("fb-contact-type"), 20),
     o = fbSanitize(n("fb-contact-val"), FB_MAX_CONTACT);
-  (s && !o && "email" === s && t("📧 اكتبي الإيميل."),
+  if (
+    (s && !o && "email" === s && t("📧 اكتبي الإيميل."),
     o && !s && t("📞 اختاري نوع وسيلة التواصل."),
     "email" === s &&
       o &&
       (/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(o) ||
         t("📧 صيغة الإيميل غير صحيحة."),
-      o.length > FB_MAX_CONTACT && t("📧 الإيميل طويل جدًا.")));
+      o.length > FB_MAX_CONTACT && t("📧 الإيميل طويل جدًا.")),
+    "phone" === s && o)
+  ) {
+    var c = o.replace(/\D/g, "");
+    ((c.length < 8 || c.length > 15) && t("📱 رقم الهاتف لازم 8–15 رقم."),
+      /^[+\d][\d\s\-()]{6,}$/.test(o) || t("📱 صيغة رقم الهاتف غير صحيحة."),
+      /^(\d)\1+$/.test(c) && t("📱 رقم الهاتف غير صحيح."));
+  }
+  if (
+    ("telegram" === s &&
+      o &&
+      (/^@?[A-Za-z0-9_]{5,32}$/.test(o) || t("✈️ يوزر تليجرام غير صحيح.")),
+    "whatsapp" === s && o)
+  ) {
+    var d = o.replace(/\D/g, "");
+    (d.length < 8 || d.length > 15) && t("💬 رقم واتساب لازم 8–15 رقم.");
+  }
   _fbImages.length > FB_MAX_IMAGES &&
     t("⚠️ عدد الصور أكبر من " + FB_MAX_IMAGES + ".");
   for (var l = 0, u = 0; u < _fbImages.length; u++) {
@@ -2782,7 +2801,7 @@ function fbSendCore(e) {
             redirect: "error",
           };
         (c && (l.signal = c.signal),
-          fetch("/api/feedback", l)
+          fetch(API_BASE + "/api/feedback", l)
             .then(function (e) {
               return e
                 .json()
@@ -2867,7 +2886,7 @@ function fbSendCore(e) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ★ طرق التواصل: واتساب وتليجرام مباشر (wa.me / t.me) | إيميل بكود تأكيد (OTP)
+// ★ طرق التواصل: واتساب مباشر | تليجرام وإيميل بكود تأكيد (OTP)
 // ═══════════════════════════════════════════════════════════
 function fbEl(id) {
   return document.getElementById(id);
@@ -2903,19 +2922,10 @@ function fbSyncFormUI() {
           : "إرسال";
   // الـ reCAPTCHA مش محتاجة مع واتساب، ولا بعد ما التأكيد يبدأ
   if (cap) cap.style.display = _fbOtp.sid ? "none" : "";
-  // واتساب / تليجرام: رفع الصور مش بيشتغل، فبنخفي القسم (#fb-upload-section) ونظهر سطر بدله
-  var up = fbEl("fb-upload-section"),
-    imgNote = fbEl("fb-chat-img-note"),
+  // واتساب / تليجرام: رفع الصور مش بيشتغل، فبنخفي القسم (والتعليمات في الملاحظة اللي فوق)
+  var up = document.querySelector(".fb-upload-section"),
     chat = "whatsapp" === t || "telegram" === t;
   if (up) up.style.display = chat ? "none" : "";
-  if (imgNote) {
-    imgNote.textContent = chat
-      ? "📷 لو عايز تبعت صورة، ابعتها في المحادثة على " +
-        ("whatsapp" === t ? "واتساب" : "تليجرام") +
-        " بعد ما تبعت الرسالة."
-      : "";
-    imgNote.style.display = chat ? "" : "none";
-  }
   if (chat && _fbImages && _fbImages.length) {
     _fbImages = [];
     "function" == typeof fbRenderPreviews && fbRenderPreviews();
@@ -2938,8 +2948,10 @@ function fbOnContactChange() {
     note = fbEl("fb-contact-note"),
     notes = {
       email: "📧 هنبعتلك كود تأكيد على الإيميل ده، ولازم تكتبه علشان الرسالة تتبعت.",
-      telegram: "✈️ هيتفتح تليجرام برسالة جاهزة وإنت اللي تضغط إرسال هناك.",
-      whatsapp: "💬 هيتفتح واتساب برسالة جاهزة وإنت اللي تضغط إرسال هناك.",
+      telegram:
+        "✈️ هيتفتح تليجرام برسالة جاهزة وإنت اللي تضغط إرسال. لو عايز تبعت صورة (سكرين شوت مثلًا)، ابعتها في المحادثة بعد الرسالة.",
+      whatsapp:
+        "💬 هيتفتح واتساب برسالة جاهزة وإنت اللي تضغط إرسال. لو عايز تبعت صورة (سكرين شوت مثلًا)، ابعتها في المحادثة بعد الرسالة.",
     };
   fbOtpReset();
   wrap && (wrap.style.display = "email" === t ? "" : "none");
@@ -2985,7 +2997,7 @@ function fbSendChatLink(kind) {
 
   fbLockButtons(!0);
   fbSay("", "⏳ جاري التحقق...");
-  fetch("/api/feedback", {
+  fetch(API_BASE + "/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -3021,7 +3033,8 @@ function fbSendChatLink(kind) {
       fbSay(
         "ok",
         (wa ? "💬 اتفتح واتساب" : "✈️ اتفتح تليجرام") +
-          " — اضغط إرسال هناك علشان الرسالة توصلنا.",
+          " — اضغط إرسال هناك علشان الرسالة توصلنا." +
+          "\n📷 لو عايز تبعت صورة، ابعتها في نفس المحادثة بعد الرسالة.",
       );
     })
     .catch(function () {
@@ -3033,7 +3046,7 @@ function fbSendChatLink(kind) {
     });
 }
 
-// إيميل: مرحلتين — (1) بدء التأكيد  (2) كتابة الكود وإرسال الرسالة
+// تليجرام / إيميل: مرحلتين — (1) بدء التأكيد  (2) كتابة الكود وإرسال الرسالة
 function fbSendOtpFlow(ct) {
   // المرحلة 2
   if (_fbOtp.sid && _fbOtp.type === ct) {
@@ -3061,7 +3074,7 @@ function fbSendOtpFlow(ct) {
 
   fbLockButtons(!0);
   fbSay("", "⏳ جاري تجهيز التأكيد...");
-  fetch("/api/feedback", {
+  fetch(API_BASE + "/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -3096,17 +3109,29 @@ function fbSendOtpFlow(ct) {
 function fbShowOtpBox(ct, j) {
   var box = fbEl("fb-otp-box"),
     hint = fbEl("fb-otp-hint"),
+    tg = fbEl("fb-otp-tg"),
     rs = fbEl("fb-otp-resend"),
     code = fbEl("fb-otp-code");
   box && (box.style.display = "");
   code && (code.value = "");
-  hint &&
-    (hint.textContent =
-      "📧 بعتنا كود من 6 أرقام على " +
-      (j.maskedTo || "إيميلك") +
-      " — اكتبه تحت (صالح 10 دقايق). لو مش لاقيه شوف الـ Spam.");
-  rs && ((rs.style.display = ""), (rs.disabled = !1));
-  code && code.focus();
+  if ("email" === ct) {
+    hint &&
+      (hint.textContent =
+        "📧 بعتنا كود من 6 أرقام على " +
+        (j.maskedTo || "إيميلك") +
+        " — اكتبه تحت (صالح 10 دقايق). لو مش لاقيه شوف الـ Spam.");
+    tg && (tg.style.display = "none");
+    rs && ((rs.style.display = ""), (rs.disabled = !1));
+    code && code.focus();
+  } else {
+    hint &&
+      (hint.textContent =
+        "✈️ (1) اضغط الزرار وافتح البوت واضغط Start. (2) البوت هيبعتلك كود من 6 أرقام. (3) اكتبه هنا. لو الكود ما وصلش اضغط الزرار وStart تاني.");
+    rs && (rs.style.display = "none");
+    tg &&
+      0 === String(j.botUrl || "").indexOf("https://t.me/") &&
+      ((tg.href = j.botUrl), (tg.style.display = ""));
+  }
   fbSay("ok", "اكتب الكود وبعدين اضغط «تأكيد وإرسال».");
   fbSyncFormUI();
 }
@@ -3116,7 +3141,7 @@ function fbOtpResend() {
   var btn = fbEl("fb-otp-resend");
   btn && (btn.disabled = !0);
   fbSay("", "⏳ جاري إعادة الإرسال...");
-  fetch("/api/feedback", {
+  fetch(API_BASE + "/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "otp_resend", sid: _fbOtp.sid }),
@@ -3182,6 +3207,11 @@ function fbOtpError(e) {
       "err",
       "❌ الكود غلط" +
         (null != e.left ? " — فاضل " + e.left + " محاولات." : "."),
+    );
+  if ("OTP_NOT_STARTED" === c)
+    return void fbSay(
+      "err",
+      "✈️ لسه ماضغطتش Start في البوت — افتحه الأول وهيبعتلك الكود.",
     );
   if ("OTP_BAD_CODE" === c)
     return void fbSay("err", "🔐 الكود لازم يكون 6 أرقام.");
@@ -3795,6 +3825,175 @@ function __bootDept2() {
         window.ResizeObserver && new ResizeObserver(o).observe(s));
     }
   })());
+
+/* ==========================================================
+   ★ إشعارات Push (الموقع مقفول) — إضافة فوق نظام الإشعارات الحالي
+   - نظام الجرس (notifications / lecturesAddedLog …) زي ما هو من غير تغيير.
+   - بيضيف زرار "فعّل إشعارات الجهاز" جوه قائمة الجرس.
+   ========================================================== */
+(function () {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+
+  function b64ToU8(s) {
+    var p = "=".repeat((4 - (s.length % 4)) % 4);
+    var raw = atob((s + p).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function curDept() {
+    try { return typeof CUR_DEPT !== "undefined" && CUR_DEPT ? CUR_DEPT : ""; } catch (e) { return ""; }
+  }
+
+  function getReg() {
+    return navigator.serviceWorker.getRegistration().then(function (r) {
+      return r || navigator.serviceWorker.ready;
+    });
+  }
+
+  function sendSub(sub) {
+    return fetch(API_BASE + "/api/push-subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), dept: curDept() }),
+    }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); });
+  }
+
+  function isIOSBrowserTab() {
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+    return ios && !standalone;
+  }
+
+  function isBrave() {
+    return navigator.brave && navigator.brave.isBrave
+      ? navigator.brave.isBrave().then(function (r) { return !!r; }).catch(function () { return false; })
+      : Promise.resolve(false);
+  }
+
+  function showHint(text) {
+    var bar = document.getElementById("push-bar");
+    if (!bar) return;
+    var h = document.getElementById("push-hint");
+    if (!h) {
+      h = document.createElement("div");
+      h.id = "push-hint";
+      h.style.cssText = "margin-top:8px;font-size:12px;line-height:1.8;white-space:pre-line;color:var(--text-secondary);";
+      bar.appendChild(h);
+    }
+    h.textContent = text;
+  }
+
+  function explainPushError(err) {
+    var name = (err && err.name) || "", msg = String((err && err.message) || "");
+    if (/^HTTP/.test(msg) || msg === "no key") {
+      showToast("\u26A0\uFE0F مشكلة في السيرفر — جرّب تاني بعد شوية");
+      return;
+    }
+    if (name === "NotAllowedError") {
+      showHint("الإشعارات مش مسموحة. اضغطي على أيقونة القفل/الأسد جنب العنوان وفعّلي الإشعارات.");
+      return;
+    }
+    // AbortError / "push service error" = خدمة الـ Push نفسها مقفولة في المتصفح
+    return isBrave().then(function (brave) {
+      showHint(brave
+        ? "متصفح Brave بيقفل خدمة الإشعارات افتراضيًا.\nافتحي: brave://settings/privacy\nوشغّلي: Use Google services for push messaging\nوبعدين أعيدي تشغيل المتصفح وجرّبي تاني."
+        : "المتصفح مش قادر يوصل لخدمة الإشعارات. اتأكدي إن خدمات Google Push مش مقفولة، أو جرّبي متصفح تاني.");
+    });
+  }
+
+  function enablePush() {
+    if (Notification.permission === "denied") {
+      showToast("🚫 الإشعارات متقفلة من إعدادات المتصفح — فعّليها من هناك");
+      return Promise.resolve();
+    }
+    return Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") { showToast("لم يتم السماح بالإشعارات"); return; }
+      return fetch(API_BASE + "/api/push-subscribe").then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.key) throw new Error("no key");
+        return getReg().then(function (reg) {
+          return reg.pushManager.getSubscription().then(function (s) {
+            return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(j.key) });
+          });
+        });
+      }).then(sendSub).then(function () {
+        var h = document.getElementById("push-hint"); if (h) h.remove();
+        showToast("✅ اتفعّلت إشعارات الجهاز");
+      });
+    }).catch(explainPushError).then(refreshBtn);
+  }
+
+  function disablePush() {
+    return getReg().then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (s) {
+        if (!s) return;
+        var ep = s.endpoint;
+        return s.unsubscribe().then(function () {
+          return fetch(API_BASE + "/api/push-subscribe", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: ep }),
+          }).catch(function () {});
+        });
+      });
+    }).then(function () { showToast("🔕 اتقفلت إشعارات الجهاز"); })
+      .catch(function () {})
+      .then(refreshBtn);
+  }
+
+  function refreshBtn() {
+    var btn = document.getElementById("push-toggle-btn");
+    if (!btn) return;
+    if (Notification.permission === "denied") {
+      btn.textContent = "🚫 الإشعارات متقفلة من إعدادات المتصفح";
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = false;
+    getReg().then(function (reg) { return reg && reg.pushManager.getSubscription(); }).then(function (s) {
+      var on = !!s && Notification.permission === "granted";
+      btn.textContent = on ? "🔕 إيقاف إشعارات الجهاز" : "🔔 فعّل إشعارات الجهاز (لما المحاضرات تنزل)";
+      btn.setAttribute("data-on", on ? "1" : "0");
+    }).catch(function () {});
+  }
+
+  function mountBtn() {
+    var list = document.getElementById("notif-list");
+    if (!list || !list.parentNode || document.getElementById("push-bar")) return;
+    var bar = document.createElement("div");
+    bar.id = "push-bar";
+    bar.style.cssText = "padding:10px 14px;border-bottom:1px solid var(--border);background:var(--notif-bg);";
+    var btn = document.createElement("button");
+    btn.id = "push-toggle-btn";
+    btn.type = "button";
+    btn.style.cssText = "width:100%;padding:9px 12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:13px;cursor:pointer;";
+    btn.textContent = "🔔 فعّل إشعارات الجهاز (لما المحاضرات تنزل)";
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation(); // الجرس نفسه بيقفل القائمة لو الضغطة طلعت له
+      if (isIOSBrowserTab()) {
+        showToast("📱 على الآيفون: ضيفي الموقع للشاشة الرئيسية الأول وافتحيه منها");
+        return;
+      }
+      (btn.getAttribute("data-on") === "1" ? disablePush() : enablePush());
+    });
+    bar.appendChild(btn);
+    list.parentNode.insertBefore(bar, list);
+    refreshBtn();
+  }
+
+  // لو الطالب مشترك أصلاً: نحدّث القسم بصمت (لو غيّره)
+  function silentSync() {
+    if (Notification.permission !== "granted") return;
+    getReg().then(function (reg) { return reg && reg.pushManager.getSubscription(); }).then(function (s) {
+      if (s) return sendSub(s);
+    }).catch(function () {});
+  }
+
+  function init() { mountBtn(); silentSync(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
 
 /* =====================================================================
    🔁 الأسئلة المكررة
