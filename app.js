@@ -6447,9 +6447,13 @@ function __bootDept2() {
   // ★ قراءة program/section من localStorage (حتى لو الطالب ما أكدش جدوله)
   function getProgSec() {
     try {
-      var prog = localStorage.getItem("sd.prog") || "";
-      var sec = localStorage.getItem("sd.sec") || "";
-      return { program: prog, section: sec };
+      // sd.prog و sd.sec بتتخزن بـ JSON.stringify عبر دالة d()
+      // فلازم نقراهم بـ JSON.parse
+      var progRaw = localStorage.getItem("sd.prog");
+      var secRaw = localStorage.getItem("sd.sec");
+      var prog = progRaw ? JSON.parse(progRaw) : "";
+      var sec = secRaw ? JSON.parse(secRaw) : "";
+      return { program: prog || "", section: sec || "" };
     } catch (e) { return { program: "", section: "" }; }
   }
 
