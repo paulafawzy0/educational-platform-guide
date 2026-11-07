@@ -46,17 +46,23 @@ export default async function handler(req, res) {
 
     // ---------- POST: احفظ اشتراك جديد ----------
     if (req.method === "POST") {
-      const { subscription, dept } = req.body || {};
+      const { subscription, dept, targets } = req.body || {};
       if (!subscription || !subscription.endpoint) {
         return res.status(400).json({ error: "Invalid subscription" });
       }
       const key = `sub:${Buffer.from(subscription.endpoint).toString('base64url')}`;
-      await redis.hset(key, {
+      const dataToStore = {
         endpoint: subscription.endpoint,
         keys: JSON.stringify(subscription.keys),
         dept: dept || "all",
         updatedAt: Date.now()
-      });
+      };
+      // targets: قايمة من الجدول المعتمد [{course, instructor, program, section, type}]
+      // لو اتبعتت، نحفظها كـ JSON string
+      if (targets && Array.isArray(targets)) {
+        dataToStore.targets = JSON.stringify(targets);
+      }
+      await redis.hset(key, dataToStore);
       return res.status(200).json({ success: true });
     }
 

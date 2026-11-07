@@ -1,5 +1,5 @@
 /* Service Worker — غيّري VERSION مع كل تعديل مهم: v1 → v2 → v3 ... */
-const VERSION = "v1793818510109";
+const VERSION = "v1794064655329"; // ★ غيّرت الرقم عشان المتصفح ي.pickup التحديث
 const CACHE = `study-platform-${VERSION}`;
 
 const APP_SHELL = [
@@ -72,8 +72,6 @@ self.addEventListener("message", (event) => {
 const ANNOTATOR_KEY = "./pdf-annotator.html";
 
 // Cloudflare Pages بيعمل redirect (index.html → / و pdf-annotator.html → /pdf-annotator).
-// الرد المتخزن بعد redirect بيبقى redirected=true، والمتصفح بيرفض يرد بيه على navigation (صفحة أو iframe)،
-// فبنرجّعه كنسخة نضيفة قبل ما نرد بيها.
 async function cleanResponse(res) {
   if (!res || !res.redirected) return res;
   const body = await res.blob();
@@ -84,7 +82,6 @@ async function cleanResponse(res) {
   });
 }
 
-// صفحة بديلة تظهر جوه الـ iframe لو مفيش نت (بدل ما المنصة كلها تتفتح جواه)
 function offlineFramePage() {
   return new Response(
     '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
@@ -100,22 +97,17 @@ function offlineFramePage() {
 async function networkFirst(request, isPage) {
   const cache = await caches.open(CACHE);
   const url = new URL(request.url);
-  // قلم PDF بيتفتح بـ query مختلفة لكل ملف → نخزنه تحت مفتاح واحد
   const isAnnotator = url.pathname.endsWith("/pdf-annotator.html");
-  // صفحة المنصة نفسها (/ أو /index.html) بتتفتح بـ query كتير (?subject=..&lecture=..&_swu=..)
-  // وكلها نفس الملف → مفتاح واحد بدل ما الكاش يتملي نسخ منه
   const isAppPage =
     isPage && (url.pathname === "/" || url.pathname.endsWith("/index.html"));
   const key = isAnnotator ? ANNOTATOR_KEY : isAppPage ? "./" : request;
   try {
-    // الصفحات: دايمًا نسأل السيرفر (ETag) بدل ما نعتمد على HTTP cache
     const response = await fetch(request, isPage ? { cache: "no-cache" } : undefined);
     if (response && response.status === 200) cache.put(key, response.clone());
     return response;
   } catch (err) {
     const hit = await cache.match(key);
     if (hit) return cleanResponse(hit);
-    // iframe: ما نرجّعش index.html (ده اللي كان بيفتح المنصة جوه المنصة)
     if (request.destination === "iframe") return offlineFramePage();
     if (isPage) {
       const page =
@@ -132,14 +124,6 @@ async function networkFirst(request, isPage) {
   }
 }
 
-/* ==========================================================
-   ★ شبكة خاصة بـ pwa.js:
-   - بتتخطى الـ HTTP cache بالكامل (cache: 'no-store' + query عشوائي).
-   - بتحل مشكلة "الموقع مش بيعرض التحديث": Vercel كان بيخدم
-     pwa.js من HTTP cache (max-age=3600)، فالـ SW كان بيعيد
-     تخزين النسخة القديمة. دلوقتي بنجيب نسخة نضيفة كل مرة.
-   - بنخزن تحت cleanUrl (بدون query) عشان الأوفلاين يشتغل.
-   ========================================================== */
 async function networkFirstPwa(request) {
   const cache = await caches.open(CACHE);
   const urlObj = new URL(request.url);
@@ -156,9 +140,7 @@ async function networkFirstPwa(request) {
       const clean = await cleanResponse(raw);
       try {
         await cache.put(cleanUrl, clean.clone());
-      } catch (e) {
-        // لو فشل التخزين (نادر) — منمنعش الرد
-      }
+      } catch (e) {}
       return clean;
     }
     return raw;
@@ -172,8 +154,6 @@ async function networkFirstPwa(request) {
   }
 }
 
-// revalidate=true (ملفات الموقع نفسه): التحديث في الخلفية لازم يسأل السيرفر (ETag)
-// مش HTTP cache — وإلا ملفات المواد (datenew/*.js) ممكن تفضل قديمة لحد ساعة بعد الـ deploy
 async function staleWhileRevalidate(request, revalidate) {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(request);
@@ -191,21 +171,18 @@ async function staleWhileRevalidate(request, revalidate) {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
-  if (request.headers.has("range")) return; // ملفات PDF/فيديو بتيجي أجزاء
+  if (request.headers.has("range")) return;
 
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
-    // insights بتتجاوز الكاش
     if (url.pathname.startsWith("/_vercel/")) return;
 
     if (request.mode === "navigate") {
       event.respondWith(networkFirst(request, true));
     } else if (url.pathname.endsWith("/pwa.js")) {
-      // ★ pwa.js: نجيب نسخة نضيفة كل مرة (بدون HTTP cache)
       event.respondWith(networkFirstPwa(request));
     } else if (url.pathname.endsWith("/app.js") || url.pathname.startsWith("/api/")) {
-      // app.js و api — networkFirst عادي (app.js عنده max-age=0, must-revalidate)
       event.respondWith(networkFirst(request, false));
     } else {
       event.respondWith(staleWhileRevalidate(request, true));
@@ -216,50 +193,84 @@ self.addEventListener("fetch", (event) => {
   if (CDN_HOSTS.includes(url.hostname)) {
     event.respondWith(staleWhileRevalidate(request));
   }
-  // Google Drive وأي حاجة تانية بتعدي من غير تدخل
 });
 
 /* ==========================================================
-   الإشعارات (Web Push)
+   ★★★ إشعارات Push — الجزء اللي كان ناقص ★★★
    ========================================================== */
-self.addEventListener("push", (event) => {
-  let d = {};
-  try {
-    d = event.data ? event.data.json() : {};
-  } catch (e) {
-    d = { title: "إشعار جديد", body: event.data ? event.data.text() : "" };
+
+// إعدادات حسب نوع الإشعار
+function getNotificationSettings(type) {
+  switch (type) {
+    case "lecture":
+      return { vibrate: [200, 100, 200], requireInteraction: false };
+    case "cancel":
+      return { vibrate: [300, 100, 300, 100, 300], requireInteraction: true };
+    case "alert":
+      return { vibrate: [400, 100, 400], requireInteraction: true };
+    case "exam":
+      return { vibrate: [200, 50, 200, 50, 200, 50, 200], requireInteraction: true };
+    default:
+      return { vibrate: [200], requireInteraction: false };
   }
-  const title = d.title || "إشعار جديد";
+}
+
+// لما السيرفر يبعت push → نعرض الإشعار
+self.addEventListener("push", (event) => {
+  let data = { title: "منصة المواد", body: "إشعار جديد", url: "/", type: "general" };
+
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+
+  const settings = getNotificationSettings(data.type);
+
+  const options = {
+    body: data.body,
+    vibrate: settings.vibrate,
+    tag: `notif_${Date.now()}`,
+    renotify: true,
+    data: {
+      url: data.url || "/",
+      type: data.type || "general",
+      date: new Date().toISOString(),
+    },
+    actions: [
+      { action: "open", title: "فتح الموقع" },
+      { action: "close", title: "إغلاق" },
+    ],
+    requireInteraction: settings.requireInteraction,
+  };
+
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: d.body || "",
-      icon: new URL("./icons/icon-192.png", self.location.href).href,
-      badge: new URL("./icons/icon-192.png", self.location.href).href,
-      tag: d.tag || undefined,
-      dir: "rtl",
-      lang: "ar",
-      data: { url: d.url || "/" },
-    }),
+    self.registration.showNotification(data.title, options)
   );
 });
 
+// لما الطالب يضغط الإشعار
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL(
-    (event.notification.data && event.notification.data.url) || "/",
-    self.location.origin,
-  ).href;
+
+  if (event.action === "close") return;
+
+  const targetUrl = event.notification.data?.url || "/";
+
   event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((list) => {
-        for (const c of list) {
-          if (c.url.startsWith(self.location.origin) && "focus" in c) {
-            if ("navigate" in c) c.navigate(target).catch(() => {});
-            return c.focus();
-          }
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // لو الموقع مفتوح في تبويب، نركز عليه
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin)) {
+          client.focus();
+          client.navigate(targetUrl);
+          return;
         }
-        return self.clients.openWindow(target);
-      }),
+      }
+      // لو مفتوحش، نفتح تبويب جديد
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    }),
   );
 });
