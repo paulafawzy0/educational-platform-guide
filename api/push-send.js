@@ -141,27 +141,23 @@ function matchesTarget(subData, params) {
     return true;
   }
 
-  // نبني target افتراضي واحد من program/section
-  const fakeTarget = {
-    course: '',        // مش عارفين المادة
-    instructor: '',    // مش عارفين المعيد
-    program: subProgram,
-    section: subSection,
-    type: ''
-  };
+  // لو فيه course/instructor/classType في الإشعار بس الطالب مفيش targets
+  // → مش نقدر نفلتر بدقة، فميبعتوش (return false)
+  // ده عشان الإشعار يوصل بس لللي عندهم targets صحيحة (جدول معتمد أو مختار)
+  if (params.course || params.instructor || params.classType) {
+    return false;
+  }
 
-  // نفلتر بـ program و section بس (مش نقدر نفلتر بـ course/instructor/classType)
+  // فلترة بـ program و section بس
   const nProgram = params.program ? norm(params.program) : null;
   const nSection = params.section ? norm(String(params.section)) : null;
 
-  if (nProgram && norm(fakeTarget.program) !== nProgram) return false;
+  if (nProgram && norm(subProgram) !== nProgram) return false;
   if (nSection) {
-    const tSecs = String(fakeTarget.section || '').split(/\s+/).map(norm).filter(Boolean);
+    const tSecs = String(subSection || '').split(/\s+/).map(norm).filter(Boolean);
     if (!tSecs.includes(nSection)) return false;
   }
 
-  // لو فيه course/instructor/classType في الإشعار بس الطالب مفيش targets
-  // → مش نقدر نفلتر بدقة، فنبعتو (أحسن نعطيه الإشعار من نحرمه)
   return true;
 }
 

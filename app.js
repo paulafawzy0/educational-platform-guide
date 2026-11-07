@@ -3278,7 +3278,9 @@ function pgOpenLecture(e, t) {
                   hour: "2-digit",
                   minute: "2-digit",
                 })),
-              window.mysRefresh && window.mysRefresh());
+              window.mysRefresh && window.mysRefresh(),
+              // ★ بعد تحميل الجدول، نعمل re-sync للاشتراك بـ targets الجديدة
+              setTimeout(function () { if (typeof window.__pushSilentSync === 'function') window.__pushSilentSync(); }, 500));
           })
           .catch(function () {
             E(
