@@ -6390,30 +6390,55 @@ function __bootDept2() {
     });
   }
 
-  // ★ بناء قايمة targets من الجدول المعتمد
-  // كل target: {course, instructor, program, section, type}
-  // اللي بيبعت اشتراكه لما جدوله يكون معتمد، يبقى استهداف الإشعار يوصله بدقة
+  // ★ بناء قايمة targets من الجدول المعتمد أو من program/section المختارين
   function buildTargets() {
     try {
       var confirmed = window.mysConfirmed;
       var allData = (window.dashGetData && window.dashGetData()) || {};
       var schedule = allData.schedule || [];
-      if (!confirmed || !confirmed.ids || !confirmed.ids.length) return [];
-      var idSet = {};
-      confirmed.ids.forEach(function (id) { idSet[id] = true; });
-      var targets = [];
-      for (var i = 0; i < schedule.length; i++) {
-        var r = schedule[i];
-        if (!r || !r.id || !idSet[r.id]) continue;
-        targets.push({
-          course: r.course_name_ar || "",
-          instructor: r.instructor || "",
-          program: r.program || "",
-          section: r.section || "",
-          type: r.type || ""
-        });
+
+      // 1) لو فيه جدول معتمد → نبني targets منه
+      if (confirmed && confirmed.ids && confirmed.ids.length) {
+        var idSet = {};
+        confirmed.ids.forEach(function (id) { idSet[id] = true; });
+        var targets = [];
+        for (var i = 0; i < schedule.length; i++) {
+          var r = schedule[i];
+          if (!r || !r.id || !idSet[r.id]) continue;
+          targets.push({
+            course: r.course_name_ar || "",
+            instructor: r.instructor || "",
+            program: r.program || "",
+            section: r.section || "",
+            type: r.type || ""
+          });
+        }
+        return targets;
       }
-      return targets;
+
+      // 2) ★ مفيش جدول معتمد → نبني targets من program/section المختارين
+      //    ده عشان الطالب اللي اختار قسم/سكشن من صفحة الجدول من غير ما يأكد
+      var ps = getProgSec();
+      if (ps.program && ps.section && schedule.length) {
+        var targets2 = [];
+        for (var j = 0; j < schedule.length; j++) {
+          var row = schedule[j];
+          if (!row || !row.program || row.program !== ps.program) continue;
+          // section في الجدول ممكن يكون "1 2 3" — نشوف لو section الطالب فيه
+          var sections = String(row.section || "").split(/\s+/);
+          if (sections.indexOf(ps.section) === -1) continue;
+          targets2.push({
+            course: row.course_name_ar || "",
+            instructor: row.instructor || "",
+            program: row.program || "",
+            section: row.section || "",
+            type: row.type || ""
+          });
+        }
+        return targets2;
+      }
+
+      return [];
     } catch (e) { return []; }
   }
 
