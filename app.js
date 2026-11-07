@@ -3307,9 +3307,13 @@ function pgOpenLecture(e, t) {
             (e = d(r)) && e.d && ((i = e.d), (s = e.t)),
             o("d-prog").addEventListener("change", function () {
               (d("sd.prog", this.value), d("sd.sec", ""), y(""), g());
+              // ★ حدّث اشتراك Push بـ program/section الجديدة
+              setTimeout(function () { if (typeof window.__pushSilentSync === 'function') window.__pushSilentSync(); }, 300);
             }),
             o("d-sec").addEventListener("change", function () {
               (d("sd.sec", this.value), g());
+              // ★ حدّث اشتراك Push بـ section الجديدة
+              setTimeout(function () { if (typeof window.__pushSilentSync === 'function') window.__pushSilentSync(); }, 300);
             }),
             o("d-dsel").addEventListener("change", g),
             o("d-rf").addEventListener("click", S),
@@ -6413,11 +6417,27 @@ function __bootDept2() {
     } catch (e) { return []; }
   }
 
+  // ★ قراءة program/section من localStorage (حتى لو الطالب ما أكدش جدوله)
+  function getProgSec() {
+    try {
+      var prog = localStorage.getItem("sd.prog") || "";
+      var sec = localStorage.getItem("sd.sec") || "";
+      return { program: prog, section: sec };
+    } catch (e) { return { program: "", section: "" }; }
+  }
+
   function sendSub(sub) {
+    var ps = getProgSec();
     return fetch(API_BASE + "/api/push-subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: sub.toJSON(), dept: curDept(), targets: buildTargets() }),
+      body: JSON.stringify({
+        subscription: sub.toJSON(),
+        dept: curDept(),
+        targets: buildTargets(),
+        program: ps.program,   // ★ دايمًا نبعت program/section حتى لو ما أكدش
+        section: ps.section
+      }),
     }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); });
   }
 

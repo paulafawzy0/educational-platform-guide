@@ -88,7 +88,7 @@ function matchesTarget(subData, params) {
     }
   }
 
-  // 2) لو مفيش استهداف أدق (course/instructor/section/classType) → نوقف
+  // 2) لو مفيش استهداف أدق (course/instructor/section/classType/program) → نوقف
   if (!params.course && !params.instructor && !params.section && !params.classType && !params.program) {
     return true; // dept بس
   }
@@ -105,42 +105,64 @@ function matchesTarget(subData, params) {
     targets = [];
   }
 
-  // لو مفيش targets (اشتراك قديم) → نعامله كـ "all" (مسموح)
-  if (!Array.isArray(targets) || targets.length === 0) {
+  // 4) لو فيه targets (جدول معتمد) → نفلتر بيهم بدقة
+  if (Array.isArray(targets) && targets.length > 0) {
+    const nCourse = params.course ? norm(params.course) : null;
+    const nInstructors = params.instructor ? splitInstructors(params.instructor) : [];
+    const nSection = params.section ? norm(String(params.section)) : null;
+    const nProgram = params.program ? norm(params.program) : null;
+    const nClassType = params.classType ? norm(params.classType) : null;
+
+    for (const t of targets) {
+      if (nCourse && norm(t.course) !== nCourse) continue;
+      if (nInstructors.length > 0) {
+        const tInstrs = splitInstructors(t.instructor || '');
+        const match = nInstructors.some(ni => tInstrs.includes(ni));
+        if (!match) continue;
+      }
+      if (nProgram && norm(t.program) !== nProgram) continue;
+      if (nSection) {
+        const tSecs = String(t.section || '').split(/\s+/).map(norm).filter(Boolean);
+        if (!tSecs.includes(nSection)) continue;
+      }
+      if (nClassType && norm(t.type) !== nClassType) continue;
+      return true;
+    }
+    return false;
+  }
+
+  // 5) ★ مفيش targets — نبني targets افتراضية من program/section المحفوظين
+  //    ده عشان الطالب اللي اختار قسم/سكشن من غير ما يأكد جدوله
+  const subProgram = subData.program || '';
+  const subSection = subData.section || '';
+
+  // لو مفيش حتى program/section → نعامله كـ "all" (يستلم أي إشعار)
+  if (!subProgram && !subSection) {
     return true;
   }
 
-  // 4) نشوف لو فيه أي target يطابق كل المعاملات (AND)
-  const nCourse = params.course ? norm(params.course) : null;
-  const nInstructors = params.instructor ? splitInstructors(params.instructor) : [];
-  const nSection = params.section ? norm(String(params.section)) : null;
+  // نبني target افتراضي واحد من program/section
+  const fakeTarget = {
+    course: '',        // مش عارفين المادة
+    instructor: '',    // مش عارفين المعيد
+    program: subProgram,
+    section: subSection,
+    type: ''
+  };
+
+  // نفلتر بـ program و section بس (مش نقدر نفلتر بـ course/instructor/classType)
   const nProgram = params.program ? norm(params.program) : null;
-  const nClassType = params.classType ? norm(params.classType) : null;
+  const nSection = params.section ? norm(String(params.section)) : null;
 
-  for (const t of targets) {
-    // course
-    if (nCourse && norm(t.course) !== nCourse) continue;
-    // instructor (ممكن المعيد في الـ target يكون فيه أكتر من واحد، أو المعامل فيه أكتر من واحد)
-    if (nInstructors.length > 0) {
-      const tInstrs = splitInstructors(t.instructor || '');
-      const match = nInstructors.some(ni => tInstrs.includes(ni));
-      if (!match) continue;
-    }
-    // program
-    if (nProgram && norm(t.program) !== nProgram) continue;
-    // section (ممكن الـ target فيه أكتر من سكشن مفصولين بمسافة: "1 2 3")
-    if (nSection) {
-      const tSecs = String(t.section || '').split(/\s+/).map(norm).filter(Boolean);
-      if (!tSecs.includes(nSection)) continue;
-    }
-    // classType
-    if (nClassType && norm(t.type) !== nClassType) continue;
-
-    // لو وصلنا هنا → الـ target ده يطابق كل المعاملات
-    return true;
+  if (nProgram && norm(fakeTarget.program) !== nProgram) return false;
+  if (nSection) {
+    const tSecs = String(fakeTarget.section || '').split(/\s+/).map(norm).filter(Boolean);
+    if (!tSecs.includes(nSection)) return false;
   }
 
-  return false;
+  // لو فيه course/instructor/classType في الإشعار بس الطالب مفيش targets
+  // → مش نقدر نفلتر بدقة، فنبعتو (أحسن نعطيه الإشعار من نحرمه)
+  return true;
 }
 
 export default async function handler(req, res) {

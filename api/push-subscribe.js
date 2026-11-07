@@ -46,7 +46,7 @@ export default async function handler(req, res) {
 
     // ---------- POST: احفظ اشتراك جديد ----------
     if (req.method === "POST") {
-      const { subscription, dept, targets } = req.body || {};
+      const { subscription, dept, targets, program, section } = req.body || {};
       if (!subscription || !subscription.endpoint) {
         return res.status(400).json({ error: "Invalid subscription" });
       }
@@ -58,10 +58,13 @@ export default async function handler(req, res) {
         updatedAt: Date.now()
       };
       // targets: قايمة من الجدول المعتمد [{course, instructor, program, section, type}]
-      // لو اتبعتت، نحفظها كـ JSON string
       if (targets && Array.isArray(targets)) {
         dataToStore.targets = JSON.stringify(targets);
       }
+      // ★ program/section: دايمًا نحفظهم حتى لو مفيش targets
+      // ده عشان الطالب اللي اختار قسم/سكشن من غير ما يأكد جدوله
+      if (program !== undefined) dataToStore.program = program || "";
+      if (section !== undefined) dataToStore.section = section || "";
       await redis.hset(key, dataToStore);
       return res.status(200).json({ success: true });
     }
