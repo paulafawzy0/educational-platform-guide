@@ -1069,7 +1069,22 @@ export default async function handler(req, res) {
 
   // ★ البند 1: POST login بدل GET
   if (req.method === 'POST') {
-    const pass = req.body?.password || '';
+    // نقرا الـ body يدويًا (Vercel مش بتدعم req.body أوتوماتيك في كل الأحوال)
+    let rawBody = '';
+    for await (const chunk of req) {
+      rawBody += chunk;
+    }
+    let pass = '';
+    try {
+      // ممكن يكون JSON أو form-urlencoded
+      if (rawBody.startsWith('{')) {
+        const parsed = JSON.parse(rawBody);
+        pass = parsed.password || '';
+      } else {
+        const params = new URLSearchParams(rawBody);
+        pass = params.get('password') || '';
+      }
+    } catch { pass = ''; }
     
     // لو مفيش PANEL_PASSWORD محدد
     if (!PANEL_PASSWORD) {
