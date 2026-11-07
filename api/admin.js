@@ -50,7 +50,7 @@ const PANEL_HTML = `<!DOCTYPE html>
   <div class="card">
     <h2>⚙️ الإعدادات</h2>
     <label>رابط الـ API</label>
-    <input type="text" id="apiUrl" value="https://fcal-third-year.vercel.app/api/push-send">
+    <input type="text" id="apiUrl" value="__PUBLIC_API_URL__">
     <label>كلمة سر الإرسال (ADMIN_SECRET)</label>
     <input type="password" id="secret" placeholder="اكتبي كلمة سر الإرسال هنا">
     <p class="hint">⚠️ كلمة السر دي بتتبعت مع الإشعار (ADMIN_SECRET). مش بتتحفظ — بتتمسح أول ما تقفلي الصفحة.</p>
@@ -1109,13 +1109,10 @@ export default async function handler(req, res) {
     const token = match ? match[1] : '';
 
     if (verifyToken(token)) {
-      // ★ البند 6: استبدل الـ apiUrl في الـ HTML
+      // ★ البند 6: استبدل الـ placeholder بـ PUBLIC_API_URL
       const htmlWithUrl = PANEL_HTML.replace(
-        'value="https://faclstudentdcs.vercel.app/api/push-send"',
-        `value="${PUBLIC_API_URL}"`
-      ).replace(
-        'value="https://fcal-third-year.vercel.app/api/push-send"',
-        `value="${PUBLIC_API_URL}"`
+        '__PUBLIC_API_URL__',
+        PUBLIC_API_URL
       );
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(htmlWithUrl);

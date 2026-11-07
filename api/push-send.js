@@ -296,6 +296,48 @@ export default async function handler(req, res) {
       }
     }
 
+    // ★ البند 11: إرسال نسخة لبوت تلجرام (منفصل عن بوت الطلاب)
+    // لو المتغيرين مش موجودين، يتخطى بهدوء
+    const TG_LOG_TOKEN = process.env.TELEGRAM_LOG_BOT_TOKEN;
+    const TG_LOG_CHAT = process.env.TELEGRAM_LOG_CHAT_ID;
+    
+    if (TG_LOG_TOKEN && TG_LOG_CHAT && !dryRun) {
+      try {
+        // نبني نص الإشعار
+        const targeting = [];
+        if (dept && dept !== 'all') targeting.push(`القسم: ${dept}`);
+        if (course) targeting.push(`المادة: ${course}`);
+        if (instructor) targeting.push(`المعيد: ${instructor}`);
+        if (program) targeting.push(`البرنامج: ${program}`);
+        if (section) targeting.push(`السكشن: ${section}`);
+        if (classType) targeting.push(`النوع: ${classType}`);
+        
+        const tgText = `📢 <b>إشعار جديد تم إرساله</b>\n\n` +
+          `📌 <b>العنوان:</b> ${title}\n` +
+          `📝 <b>النص:</b> ${body}\n` +
+          `🔗 <b>الرابط:</b> ${url || '/'}\n` +
+          `🏷️ <b>النوع:</b> ${type || 'general'}\n` +
+          (targeting.length ? `🎯 <b>المستهدفين:</b> ${targeting.join(' | ')}\n` : '') +
+          `✅ <b>نجح:</b> ${sent} | ❌ <b>فشل:</b> ${failed}`;
+        
+        // نقص النص لو طويل (تلجرام حد 4096)
+        const finalText = tgText.length > 4000 ? tgText.substring(0, 4000) + '...' : tgText;
+        
+        await fetch(`https://api.telegram.org/bot${TG_LOG_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: TG_LOG_CHAT,
+            parse_mode: 'HTML',
+            text: finalText
+          })
+        });
+      } catch (e) {
+        // لو فشل التلجرام، ما نكسرش الطلب
+        console.warn('Telegram log notify failed:', e.message);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       sent,
