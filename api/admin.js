@@ -998,10 +998,13 @@ export default async function handler(req, res) {
   }
 
   // ★ البند 3: نظام الحظر في Redis
-  const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  // نقرا من أي متغيرات Upstash متاحة (REST أو KV)
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '';
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '';
+  const redis = (redisUrl && redisToken)
     ? new (await import('@upstash/redis')).Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        url: redisUrl,
+        token: redisToken,
       })
     : null;
 
