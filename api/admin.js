@@ -298,8 +298,7 @@ var SCHEDULE_DATA =
       "م/ اسماء اسماعيل",
       "م/ ريم اسامة",
       "م/ علي أحمد",
-      "م/ مصطفى أسامة",
-      "م/ مصطفى اسامة"
+      "م/ مصطفى اسامة",
     ],
     "هندسة البرمجيات": [
       "د/ احمد مصطفى",
@@ -412,7 +411,7 @@ var SCHEDULE_DATA =
     "البرمجة المرئية|م/ علي أحمد": [
       "lab"
     ],
-    "البرمجة المرئية|م/ مصطفى أسامة": [
+    "البرمجة المرئية|م/ مصطفى اسامة": [
       "lab"
     ],
     "الرسم بالحاسب|د/ لؤى ممدوح محمد": [
@@ -529,7 +528,7 @@ var SCHEDULE_DATA =
     "م/ علي أحمد": [
       "البرمجة المرئية"
     ],
-    "م/ مصطفى أسامة": [
+    "م/ مصطفى اسامة": [
       "البرمجة المرئية"
     ],
     "د/ لؤى ممدوح محمد": [
@@ -651,7 +650,7 @@ var SCHEDULE_DATA =
     "م/ محمد طه",
     "م/ محمد عبدالحميد",
     "م/ محمود عصام",
-    "م/ مصطفى أسامة",
+    "م/ مصطفى اسامة",
     "م/ مصطفى اسامة",
     "م/ مصطفى عبدالحليم",
     "م/ نهاد عبدالرحيم",
@@ -925,7 +924,7 @@ onDeptChange();
 </html>
 `;
 
-// ★ صفحة تسجيل الدخول (POST form — مش GET)
+// ★ صفحة تسجيل الدخول (POST عبر fetch — مش GET)
 const LOGIN_HTML = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -944,21 +943,70 @@ const LOGIN_HTML = `<!DOCTYPE html>
   input:focus { outline: none; border-color: #38bdf8; }
   button { width: 100%; padding: 14px; font-size: 16px; font-weight: 700; font-family: inherit; background: #059669; color: #fff; border: 0; border-radius: 10px; cursor: pointer; transition: background 0.2s; }
   button:hover { background: #047857; }
+  button:disabled { opacity: 0.5; cursor: wait; }
   .error { color: #f87171; text-align: center; font-size: 13px; margin-bottom: 16px; display: none; }
   .error.show { display: block; }
+  .ban-msg { color: #f87171; text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 16px; padding: 12px; background: rgba(239,68,68,0.1); border-radius: 10px; display: none; }
+  .ban-msg.show { display: block; }
 </style>
 </head>
 <body>
 <div class="login-box">
   <h1>🔐 لوحة الإشعارات</h1>
   <p>اكتبي كلمة السر للدخول</p>
-  <div class="error" id="err" style="display: none;">❌ كلمة السر غلط</div>
-  <form method="POST" action="/api/admin">
+  <div class="ban-msg" id="banMsg"></div>
+  <div class="error" id="err">❌ كلمة السر غلط</div>
+  <form onsubmit="return doLogin(event)">
     <label>كلمة السر</label>
-    <input type="password" name="password" placeholder="•••••••••" autofocus required>
-    <button type="submit">🔑 دخول</button>
+    <input type="password" id="pass" placeholder="•••••••••" autofocus required>
+    <button type="submit" id="loginBtn">🔑 دخول</button>
   </form>
 </div>
+<script>
+function doLogin(e) {
+  e.preventDefault();
+  var pass = document.getElementById('pass').value;
+  if (!pass) return false;
+  var btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري الدخول...';
+  
+  fetch(window.location.pathname, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pass })
+  }).then(function(r) {
+    if (r.redirected) {
+      window.location.href = r.url;
+      return;
+    }
+    if (r.status === 429) {
+      return r.text().then(function(t) {
+        var d = document.createElement('div');
+        d.innerHTML = t;
+        var banText = d.querySelector('h1') ? d.querySelector('h1').textContent : 'تم حظرك';
+        document.getElementById('banMsg').textContent = banText;
+        document.getElementById('banMsg').classList.add('show');
+        document.getElementById('err').classList.remove('show');
+        btn.disabled = false;
+        btn.textContent = '🔑 دخول';
+      });
+    }
+    if (r.status === 401) {
+      document.getElementById('err').classList.add('show');
+      document.getElementById('banMsg').classList.remove('show');
+      btn.disabled = false;
+      btn.textContent = '🔑 دخول';
+      return;
+    }
+    // لو status 200 أو redirect → اعمل reload
+    window.location.reload();
+  }).catch(function() {
+    window.location.reload();
+  });
+  return false;
+}
+</script>
 </body>
 </html>`;
 
@@ -1069,22 +1117,8 @@ export default async function handler(req, res) {
 
   // ★ البند 1: POST login بدل GET
   if (req.method === 'POST') {
-    // نقرا الـ body يدويًا (Vercel مش بتدعم req.body أوتوماتيك في كل الأحوال)
-    let rawBody = '';
-    for await (const chunk of req) {
-      rawBody += chunk;
-    }
-    let pass = '';
-    try {
-      // ممكن يكون JSON أو form-urlencoded
-      if (rawBody.startsWith('{')) {
-        const parsed = JSON.parse(rawBody);
-        pass = parsed.password || '';
-      } else {
-        const params = new URLSearchParams(rawBody);
-        pass = params.get('password') || '';
-      }
-    } catch { pass = ''; }
+    // Vercel بتدعم req.body تلقائيًا للـ JSON
+    const pass = (req.body && req.body.password) || '';
     
     // لو مفيش PANEL_PASSWORD محدد
     if (!PANEL_PASSWORD) {
