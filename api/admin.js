@@ -298,7 +298,8 @@ var SCHEDULE_DATA =
       "م/ اسماء اسماعيل",
       "م/ ريم اسامة",
       "م/ علي أحمد",
-      "م/ مصطفى اسامة",
+      "م/ مصطفى أسامة",
+      "م/ مصطفى اسامة"
     ],
     "هندسة البرمجيات": [
       "د/ احمد مصطفى",
@@ -411,7 +412,7 @@ var SCHEDULE_DATA =
     "البرمجة المرئية|م/ علي أحمد": [
       "lab"
     ],
-    "البرمجة المرئية|م/ مصطفى اسامة": [
+    "البرمجة المرئية|م/ مصطفى أسامة": [
       "lab"
     ],
     "الرسم بالحاسب|د/ لؤى ممدوح محمد": [
@@ -528,7 +529,7 @@ var SCHEDULE_DATA =
     "م/ علي أحمد": [
       "البرمجة المرئية"
     ],
-    "م/ مصطفى اسامة": [
+    "م/ مصطفى أسامة": [
       "البرمجة المرئية"
     ],
     "د/ لؤى ممدوح محمد": [
@@ -650,7 +651,7 @@ var SCHEDULE_DATA =
     "م/ محمد طه",
     "م/ محمد عبدالحميد",
     "م/ محمود عصام",
-    "م/ مصطفى اسامة",
+    "م/ مصطفى أسامة",
     "م/ مصطفى اسامة",
     "م/ مصطفى عبدالحليم",
     "م/ نهاد عبدالرحيم",
@@ -1045,16 +1046,39 @@ export default async function handler(req, res) {
     catch { return false; }
   }
 
-  // ★ البند 3: نظام الحظر في Redis
-  // نقرا من أي متغيرات Upstash متاحة (REST أو KV)
+  // ★ البند 3: نظام الحظر في Redis (عبر REST API مباشرة)
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '';
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '';
-  const redis = (redisUrl && redisToken)
-    ? new (await import('@upstash/redis')).Redis({
-        url: redisUrl,
-        token: redisToken,
-      })
-    : null;
+  const redisEnabled = !!(redisUrl && redisToken);
+
+  async function redisGet(key) {
+    if (!redisEnabled) return null;
+    try {
+      const r = await fetch(`${redisUrl}/get/${encodeURIComponent(key)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      });
+      const data = await r.json();
+      return data.result;
+    } catch { return null; }
+  }
+
+  async function redisSet(key, value) {
+    if (!redisEnabled) return;
+    try {
+      await fetch(`${redisUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      });
+    } catch {}
+  }
+
+  async function redisDel(key) {
+    if (!redisEnabled) return;
+    try {
+      await fetch(`${redisUrl}/del/${encodeURIComponent(key)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      });
+    } catch {}
+  }
 
   // IP من Vercel headers
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
@@ -1062,11 +1086,10 @@ export default async function handler(req, res) {
   const banKey = `ban:${ip}`;
 
   async function checkBan() {
-    if (!redis) return null;
+    const banRaw = await redisGet(banKey);
+    if (!banRaw) return null;
     try {
-      const banData = await redis.get(banKey);
-      if (!banData) return null;
-      const ban = typeof banData === 'string' ? JSON.parse(banData) : banData;
+      const ban = JSON.parse(banRaw);
       if (ban.level === 'perm') {
         return { level: 'perm', message: '🚫 تم حظرك بشكل دائم من الدخول للوحة.' };
       }
@@ -1075,43 +1098,39 @@ export default async function handler(req, res) {
         return { level: 'temp', message: `🚫 تم حظرك مؤقتًا. متبقي ${hoursLeft} ساعة.` };
       }
       // الحظر انتهى — نمسحه
-      await redis.del(banKey);
+      await redisDel(banKey);
       return null;
     } catch { return null; }
   }
 
   async function recordFailedAttempt() {
-    if (!redis) return;
-    try {
-      const existing = await redis.get(banKey);
-      let ban = existing ? (typeof existing === 'string' ? JSON.parse(existing) : existing) : { fails: 0, level: 'none' };
-      ban.fails = (ban.fails || 0) + 1;
-      
-      if (ban.fails >= 5) {
-        if (ban.level === 'temp') {
-          // كان محظور مؤقتًا قبل كده → حظر دائم
-          ban.level = 'perm';
-          delete ban.until;
-        } else {
-          // أول مرة → حظر مؤقت 24 ساعة
-          ban.level = 'temp';
-          ban.until = Date.now() + 86400000;
-        }
-        ban.fails = 0;
+    const banRaw = await redisGet(banKey);
+    let ban;
+    try { ban = banRaw ? JSON.parse(banRaw) : { fails: 0, level: 'none' }; }
+    catch { ban = { fails: 0, level: 'none' }; }
+    
+    ban.fails = (ban.fails || 0) + 1;
+    
+    if (ban.fails >= 5) {
+      if (ban.level === 'temp') {
+        ban.level = 'perm';
+        delete ban.until;
+      } else {
+        ban.level = 'temp';
+        ban.until = Date.now() + 86400000;
       }
-      await redis.set(banKey, JSON.stringify(ban));
-    } catch {}
+      ban.fails = 0;
+    }
+    await redisSet(banKey, JSON.stringify(ban));
   }
 
   async function resetFails() {
-    if (!redis) return;
+    const banRaw = await redisGet(banKey);
+    if (!banRaw) return;
     try {
-      const existing = await redis.get(banKey);
-      if (existing) {
-        let ban = typeof existing === 'string' ? JSON.parse(existing) : existing;
-        ban.fails = 0;
-        await redis.set(banKey, JSON.stringify(ban));
-      }
+      const ban = JSON.parse(banRaw);
+      ban.fails = 0;
+      await redisSet(banKey, JSON.stringify(ban));
     } catch {}
   }
 
