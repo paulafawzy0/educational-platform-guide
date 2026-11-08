@@ -6614,6 +6614,7 @@ subjects.push({
       ],
     },
   ],
+
   chapters: [
     {
       t: "الفصل الأول: الأساسيات", // عنوان الفصل
@@ -6629,7 +6630,22 @@ subjects.push({
       open: true,
     },
   ],
-
+  examSections: {
+    midterm: {
+      mode: "separate",
+      open: false,
+      notes: ["الميد من الفصل الأول بس"],
+      chapters: ["الفصل الأول: الأساسيات"],
+      lectures: ["computer-networks-lecture-04"],
+    },
+    // final: {
+    //   open: true,
+    //   includeMidterm: true,
+    //   midtermOpen: false,
+    //   notes: "الفاينل بيشمل الميد + الفصل التاني",
+    //   chapters: ["الفصل الثاني :(Application Layer) "],
+    // },
+  },
   midtermsCategories: [
     {
       category: "Dr. Ebram Kamal",

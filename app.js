@@ -2034,7 +2034,209 @@ function lecCardHTML(e, t, n) {
     "</div></div>"
   );
 }
+/* ===== محتوى الميد / محتوى الفاينل (subject.examSections) ===== */
+function examCollect(e, cfg) {
+  var lecs = e.lectures || [],
+    chapters = [],
+    loose = [],
+    seen = {};
+  ((cfg.chapters || []).forEach(function (nm) {
+    nm = String(nm).trim();
+    var idxs = [];
+    (lecs.forEach(function (t, i) {
+      lecChapterOf(e, t, i) === nm && idxs.push(i);
+    }),
+      idxs.length &&
+        (chapters.push({ name: nm, idxs: idxs }),
+        idxs.forEach(function (i) {
+          seen[i] = !0;
+        })));
+  }),
+    (cfg.lectures || []).forEach(function (ref) {
+      lecs.forEach(function (t, i) {
+        (ref === i || (t && t.id && t.id === ref)) &&
+          !seen[i] &&
+          (loose.push(i), (seen[i] = !0));
+      });
+    }));
+  return { chapters: chapters, loose: loose, seen: seen };
+}
+function examStats(e, idxs) {
+  var q = 0,
+    d = 0;
+  idxs.forEach(function (i) {
+    var t = e.lectures[i],
+      n = (t.questions || []).length;
+    ((q += n),
+      (d += Math.min(
+        Object.keys(getSavedQuizFor(e, lecQuizKey(t))).length,
+        n,
+      )));
+  });
+  return { q: q, d: d };
+}
+function examSubText(e, seen, chapCount) {
+  var idxs = Object.keys(seen).map(Number),
+    st = examStats(e, idxs),
+    p = [];
+  return (
+    chapCount && p.push(chapCount + " فصل"),
+    p.push(idxs.length + " محاضرة"),
+    st.q && p.push(st.d + "/" + st.q + " سؤال"),
+    p.join(" • ")
+  );
+}
+function examNotesHTML(cfg) {
+  var n = cfg && cfg.notes;
+  return (
+    Array.isArray(n) && (n = n.filter(Boolean).join("\n")),
+    (n = n ? String(n).trim() : ""),
+    n
+      ? '<div class="notes-card"><div class="notes-card-head"><span class="notes-card-icon">📝</span><span class="notes-card-title">ملاحظات</span></div><p class="notes-card-text">' +
+        esc(n) +
+        "</p></div>"
+      : ""
+  );
+}
+function examChapterHTML(e, name, idxs, prefix) {
+  var meta = lecChapterMeta(e, name) || {},
+    st = examStats(e, idxs),
+    ck = currentSubject + "|" + prefix + "|" + name,
+    open =
+      void 0 === _chapOpen[ck]
+        ? "boolean" == typeof meta.open
+          ? meta.open
+          : !1
+        : _chapOpen[ck],
+    dd = meta.d || meta.description || "",
+    sub =
+      idxs.length +
+      " محاضرة" +
+      (st.q ? " • " + st.d + "/" + st.q + " سؤال" : "");
+  return (
+    '<div class="lc-cat lec-chapter' +
+    (open ? " open" : "") +
+    '" data-ck="' +
+    escAttr(ck) +
+    '"><div class="lc-cat-head" onclick="toggleLecChapter(this)"><span class="lc-cat-icon">' +
+    esc(meta.icon || "📘") +
+    '</span><span class="lc-cat-main"><span class="lc-cat-tt">' +
+    esc(name) +
+    '</span><span class="lc-cat-dd">' +
+    esc(dd) +
+    (dd ? " — " : "") +
+    sub +
+    '</span></span><span class="link-arrow">▶</span></div><div class="lc-cat-body"><div class="lc-cat-links">' +
+    idxs
+      .map(function (i) {
+        return lecCardHTML(e, e.lectures[i], i);
+      })
+      .join("") +
+    "</div></div></div>"
+  );
+}
+function examBlockHTML(o) {
+  var open = void 0 === _chapOpen[o.ck] ? !!o.open : _chapOpen[o.ck];
+  return (
+    '<div class="lc-cat exam-sec ' +
+    o.cls +
+    (open ? " open" : "") +
+    '" data-ck="' +
+    escAttr(o.ck) +
+    '"><div class="lc-cat-head" onclick="toggleLecChapter(this)"><span class="lc-cat-icon">' +
+    esc(o.icon) +
+    '</span><span class="lc-cat-main"><span class="lc-cat-tt">' +
+    esc(o.title) +
+    '</span><span class="lc-cat-dd">' +
+    esc(o.sub) +
+    '</span></span><span class="link-arrow">▶</span></div><div class="lc-cat-body"><div class="lc-cat-links">' +
+    o.inner +
+    "</div></div></div>"
+  );
+}
+function examBodyHTML(e, col, prefix) {
+  var h = "";
+  (col.chapters.forEach(function (c) {
+    h += examChapterHTML(e, c.name, c.idxs, prefix);
+  }),
+    col.loose.forEach(function (i) {
+      h += lecCardHTML(e, e.lectures[i], i);
+    }));
+  return h;
+}
+function examSectionsHTML(e) {
+  var cfg = e && e.examSections;
+  if (!cfg || !e.lectures || !e.lectures.length) return "";
+  var mid = cfg.midterm,
+    fin = cfg.final,
+    midCol = mid ? examCollect(e, mid) : null,
+    finCol = fin ? examCollect(e, fin) : null,
+    midHas = !!(midCol && Object.keys(midCol.seen).length),
+    finHas = !!(finCol && Object.keys(finCol.seen).length),
+    inFinal = !!(mid && "inFinal" === mid.mode),
+    withMid = !!(fin && midHas && (!0 === fin.includeMidterm || inFinal)),
+    h = "";
+  if (
+    (midHas &&
+      !withMid &&
+      (h += examBlockHTML({
+        ck: currentSubject + "|exam-mid",
+        cls: "exam-sec-mid",
+        icon: mid.icon || "📝",
+        title: mid.title || "محتوى الميد",
+        sub: examSubText(e, midCol.seen, midCol.chapters.length),
+        open: !0 === mid.open,
+        inner: examNotesHTML(mid) + examBodyHTML(e, midCol, "mid"),
+      })),
+    fin && (finHas || withMid))
+  ) {
+    var seen = {},
+      chapCount = finHas ? finCol.chapters.length : 0,
+      inner = examNotesHTML(fin);
+    (finHas &&
+      Object.keys(finCol.seen).forEach(function (k) {
+        seen[k] = !0;
+      }),
+      withMid &&
+        (Object.keys(midCol.seen).forEach(function (k) {
+          seen[k] = !0;
+        }),
+        (chapCount += midCol.chapters.length),
+        (inner += examBlockHTML({
+          ck: currentSubject + "|exam-finmid",
+          cls: "exam-sec-mid exam-sub",
+          icon: mid.icon || "📝",
+          title: mid.title || "محتوى الميد",
+          sub: examSubText(e, midCol.seen, midCol.chapters.length),
+          open: !0 === fin.midtermOpen,
+          inner: examNotesHTML(mid) + examBodyHTML(e, midCol, "finmid"),
+        }))),
+      finHas && (inner += examBodyHTML(e, finCol, "fin")),
+      (h += examBlockHTML({
+        ck: currentSubject + "|exam-fin",
+        cls: "exam-sec-fin",
+        icon: fin.icon || "🎓",
+        title: fin.title || "محتوى الفاينل",
+        sub: examSubText(e, seen, chapCount),
+        open: !0 === fin.open,
+        inner: inner,
+      })));
+  }
+  return h ? '<div class="exam-secs">' + h + "</div>" : "";
+}
 function renderLecturesList() {
+  var e = subjects[currentSubject],
+    t = document.getElementById("lectures-list"),
+    h = "";
+  try {
+    h = e ? examSectionsHTML(e) : "";
+  } catch (x) {}
+  h && !0 !== e.examSections.showLectures
+    ? t && (t.innerHTML = h)
+    : (renderLecturesListBase(),
+      h && t && t.insertAdjacentHTML("beforeend", h));
+}
+function renderLecturesListBase() {
   var e = subjects[currentSubject],
     t = document.getElementById("lectures-list");
   if (e && e.lectures && e.lectures.length) {

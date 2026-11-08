@@ -100,6 +100,16 @@ html.no-dept #dept-picker,html.no-dept #dept-picker .dept-box{animation:none}
 .dup-list li{margin-bottom:2px}
 @media (max-width:640px){.dup-box{padding:10px 12px}.dup-count{font-size:14px}.dup-list{font-size:13px;padding-right:18px}}
 </style>
+<style id="exam-sections-css">
+.exam-secs{margin-top:22px}
+.lc-cat.exam-sec-mid{border-right-color:var(--success)}
+.lc-cat.exam-sec-fin{border-right-color:var(--accent)}
+.lc-cat.exam-sub{background:var(--bg-card)}
+.lc-cat .lc-cat .lc-cat-body{display:none}
+.lc-cat .lc-cat.open>.lc-cat-body{display:block;animation:ldOpen .3s ease}
+.lc-cat .lc-cat .link-arrow{transform:none;background:transparent;color:var(--accent)}
+.lc-cat .lc-cat.open>.lc-cat-head .link-arrow{transform:rotate(90deg);background:var(--accent);color:#fff}
+</style>
 </head>
 <body>
 <!-- شاشة اختيار القسم: HTML ثابت عشان الـ LCP يترسم من غير ما يستنى app.js (بتظهر بس لو مفيش قسم محفوظ) -->
