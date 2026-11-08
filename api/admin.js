@@ -958,104 +958,238 @@ const LOGIN_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-function renderLogin({ error = false, banMessage = "" } = {}) {
+function renderLogin({ error = false, banMessage = '', mode = 'password', message = '' } = {}) {
   let html = LOGIN_HTML;
-  if (error)
-    html = html.replace(
-      '<div class="error" id="err">',
-      '<div class="error show" id="err">',
-    );
+  if (mode === 'code') {
+    html = html.replace('<title>تسجيل الدخول — لوحة الإشعارات</title>', '<title>رمز التحقق — لوحة الإشعارات</title>');
+    html = html.replace('<p>اكتبي كلمة السر للدخول</p>', '<p>بعتنا رمز من 6 أرقام على الإيميل. اكتبيه هنا (صالح 10 دقايق).</p>');
+    html = html.replace('<label>كلمة السر</label>', '<label>رمز التحقق</label>');
+    html = html.replace(/<input type="password"[^>]*>/, '<input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="one-time-code" autofocus required>');
+    html = html.replace('🔑 دخول', '✅ تأكيد');
+  }
+  if (message) html = html.replace('❌ كلمة السر غلط', message);
+  if (error) html = html.replace('<div class="error" id="err">', '<div class="error show" id="err">');
   if (banMessage) {
-    html = html.replace(
-      '<div class="ban-msg" id="banMsg"></div>',
-      '<div class="ban-msg show" id="banMsg">' + banMessage + "</div>",
-    );
+    html = html.replace('<div class="ban-msg" id="banMsg"></div>', '<div class="ban-msg show" id="banMsg">' + banMessage + '</div>');
     html = html.replace('id="loginBtn">', 'id="loginBtn" disabled>');
   }
   return html;
 }
 
+function escapeHtml(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderAdminPage(bans, currentIp) {
+  const fmt = (t) => new Date(t).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
+  const rows = bans.length ? bans.map((b) => {
+    let status;
+    if (b.level === 'perm') status = '🚫 دائم';
+    else if (b.level === 'temp' && b.until > Date.now()) status = '⏳ مؤقت — ينتهي ' + escapeHtml(fmt(b.until));
+    else if (b.level === 'temp') status = '⌛ المؤقت انتهى (أي 5 محاولات غلط تانية = دائم)';
+    else status = '⚠️ محاولات فاشلة بس (' + escapeHtml(b.fails || 0) + ')';
+    const me = b.ip === currentIp ? ' <span class="me">(ده الـ IP بتاعك)</span>' : '';
+    return '<tr><td dir="ltr">' + escapeHtml(b.ip) + me + '</td><td>' + status + '</td><td>' +
+      '<form method="POST" action="/api/admin"><input type="hidden" name="action" value="unban">' +
+      '<input type="hidden" name="ip" value="' + escapeHtml(b.ip) + '"><button type="submit">🔓 فك الحظر</button></form></td></tr>';
+  }).join('') : '<tr><td colspan="3" class="empty">مفيش أي IP محظور حاليًا ✅</td></tr>';
+
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>إدارة الحظر</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 16px; }
+  .box { max-width: 720px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 24px; }
+  h1 { font-size: 22px; color: #38bdf8; margin-bottom: 6px; }
+  p.sub { color: #94a3b8; font-size: 13px; margin-bottom: 18px; }
+  .wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: right; vertical-align: middle; }
+  th { color: #94a3b8; font-weight: 700; }
+  td.empty { text-align: center; color: #94a3b8; padding: 24px; }
+  .me { color: #fbbf24; font-size: 12px; }
+  button { padding: 8px 14px; font-size: 14px; font-weight: 700; font-family: inherit; background: #059669; color: #fff; border: 0; border-radius: 8px; cursor: pointer; }
+  button:hover { background: #047857; }
+  button.out { background: #475569; margin-top: 18px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🛡️ إدارة المحظورين</h1>
+  <p class="sub">فك الحظر بيمسح سجل الـ IP بالكامل (يبدأ من الأول).</p>
+  <div class="wrap"><table>
+    <tr><th>الـ IP</th><th>الحالة</th><th></th></tr>
+    ${rows}
+  </table></div>
+  <form method="POST" action="/api/admin"><input type="hidden" name="action" value="logout"><button class="out" type="submit">تسجيل خروج</button></form>
+</div>
+</body>
+</html>`;
+}
+
 export default async function handler(req, res) {
   // ★ البند 4: X-Robots-Tag
-  res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  if (req.method === "OPTIONS") {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
   // ★ البند 6: apiUrl من env var
-  const PUBLIC_API_URL = process.env.PUBLIC_API_URL || "";
-
+  const PUBLIC_API_URL = process.env.PUBLIC_API_URL || '';
+  
   // ★ البند 2: HMAC-SHA256 للـ Cookie
-  const crypto = await import("crypto");
-  const PANEL_PASSWORD = process.env.PANEL_PASSWORD || "";
+  const crypto = await import('crypto');
+  const PANEL_PASSWORD = process.env.PANEL_PASSWORD || '';
 
-  function makeToken() {
-    const ts = Date.now().toString();
-    const sig = crypto
-      .createHmac("sha256", PANEL_PASSWORD)
-      .update(ts)
-      .digest("hex");
-    return ts + "." + sig;
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+
+  function secretFor(role) { return role === 'admin' ? ADMIN_PASSWORD : PANEL_PASSWORD; }
+  function sigFor(role, ts) {
+    return crypto.createHmac('sha256', secretFor(role)).update(role === 'admin' ? 'admin.' + ts : ts).digest('hex');
   }
 
-  function verifyToken(token) {
-    if (!token || !PANEL_PASSWORD) return false;
-    const parts = token.split(".");
+  function makeToken(role = 'panel') {
+    const ts = Date.now().toString();
+    return ts + '.' + sigFor(role, ts);
+  }
+
+  function verifyToken(token, role = 'panel') {
+    if (!token || !secretFor(role)) return false;
+    const parts = token.split('.');
     if (parts.length !== 2) return false;
     const [ts, sig] = parts;
-    if (Date.now() - parseInt(ts) > 86400000) return false; // 24 ساعة
-    const expected = crypto
-      .createHmac("sha256", PANEL_PASSWORD)
-      .update(ts)
-      .digest("hex");
-    try {
-      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
-    } catch {
-      return false;
-    }
+    const maxAge = role === 'admin' ? 2 * 3600000 : 86400000; // الأدمن ساعتين، اللوحة 24 ساعة
+    if (!(Date.now() - parseInt(ts) <= maxAge)) return false;
+    try { return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(sigFor(role, ts))); }
+    catch { return false; }
+  }
+
+  // مقارنة نصوص بدون تسريب توقيت
+  function safeEq(a, b) {
+    if (!a || !b) return false;
+    const ha = crypto.createHash('sha256').update(String(a)).digest();
+    const hb = crypto.createHash('sha256').update(String(b)).digest();
+    return crypto.timingSafeEqual(ha, hb);
   }
 
   // ★ البند 3: نظام الحظر في Redis (عبر REST API مباشرة)
-  const redisUrl =
-    process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
-  const redisToken =
-    process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '';
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '';
   const redisEnabled = !!(redisUrl && redisToken);
 
   async function redisGet(key) {
     if (!redisEnabled) return null;
     try {
       const r = await fetch(`${redisUrl}/get/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${redisToken}` },
+        headers: { Authorization: `Bearer ${redisToken}` }
       });
       const data = await r.json();
       return data.result;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   async function redisSet(key, value) {
     if (!redisEnabled) return;
     try {
-      await fetch(
-        `${redisUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}`,
-        {
-          headers: { Authorization: `Bearer ${redisToken}` },
-        },
-      );
+      await fetch(`${redisUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      });
     } catch {}
   }
 
+  async function redisCmd(cmd) {
+    if (!redisEnabled) return null;
+    try {
+      const r = await fetch(redisUrl, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(cmd)
+      });
+      return (await r.json()).result;
+    } catch { return null; }
+  }
+
+  async function redisPipeline(cmds) {
+    if (!redisEnabled || !cmds.length) return [];
+    try {
+      const r = await fetch(`${redisUrl}/pipeline`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(cmds)
+      });
+      return await r.json();
+    } catch { return []; }
+  }
+
+  async function listBans() {
+    const keys = [];
+    let cursor = '0';
+    for (let i = 0; i < 50; i++) {
+      const out = await redisCmd(['SCAN', cursor, 'MATCH', 'ban:*', 'COUNT', '200']);
+      if (!out) break;
+      cursor = String(out[0]);
+      keys.push(...out[1]);
+      if (cursor === '0') break;
+    }
+    const vals = await redisPipeline(keys.map((k) => ['GET', k]));
+    const bans = [];
+    keys.forEach((k, i) => {
+      try {
+        const b = JSON.parse(vals[i] && vals[i].result);
+        if (b && (b.level === 'temp' || b.level === 'perm' || b.fails > 0)) bans.push({ ip: k.slice(4), ...b });
+      } catch {}
+    });
+    const rank = (b) => (b.level === 'perm' ? 0 : b.level === 'temp' ? 1 : 2);
+    return bans.sort((x, y) => rank(x) - rank(y));
+  }
+
+  async function redisDel(key) {
+    if (!redisEnabled) return;
+    try {
+      await fetch(`${redisUrl}/del/${encodeURIComponent(key)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      });
+    } catch {}
+  }
+
+  // ★ التحقق بالإيميل (2FA): الرمز بيتبعت على ADMIN_EMAIL عن طريق Resend
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
+  const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+  const OTP_FROM = process.env.OTP_FROM || 'onboarding@resend.dev';
+  const OTP_TTL_MS = 10 * 60 * 1000;
+
+  function hashCode(code, id) {
+    return crypto.createHmac('sha256', PANEL_PASSWORD).update(code + ':' + id).digest('hex');
+  }
+
+  async function sendOtpEmail(code) {
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: OTP_FROM,
+          to: [ADMIN_EMAIL],
+          subject: 'رمز الدخول للوحة الإشعارات',
+          html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif"><p>رمز الدخول بتاعك:</p><p style="font-size:32px;font-weight:700;letter-spacing:6px">${code}</p><p>صالح 10 دقايق. لو مش إنتي اللي حاولتي تدخلي، تجاهلي الرسالة.</p></div>`
+        })
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
   // IP من Vercel headers
-  const ip =
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-    req.headers["x-real-ip"] ||
-    "unknown";
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+              req.headers['x-real-ip'] || 'unknown';
   const banKey = `ban:${ip}`;
 
   async function checkBan() {
@@ -1063,43 +1197,32 @@ export default async function handler(req, res) {
     if (!banRaw) return null;
     try {
       const ban = JSON.parse(banRaw);
-      if (ban.level === "perm") {
-        return {
-          level: "perm",
-          message: "🚫 تم حظرك بشكل دائم من الدخول للوحة.",
-        };
+      if (ban.level === 'perm') {
+        return { level: 'perm', message: '🚫 تم حظرك بشكل دائم من الدخول للوحة.' };
       }
-      if (ban.level === "temp" && ban.until > Date.now()) {
+      if (ban.level === 'temp' && ban.until > Date.now()) {
         const hoursLeft = Math.ceil((ban.until - Date.now()) / 3600000);
-        return {
-          level: "temp",
-          message: `🚫 تم حظرك مؤقتًا. متبقي ${hoursLeft} ساعة.`,
-        };
+        return { level: 'temp', message: `🚫 تم حظرك مؤقتًا. متبقي ${hoursLeft} ساعة.` };
       }
       // الحظر المؤقت انتهى — نسيب السجل (level=temp) عشان أول 5 محاولات فاشلة بعده تتصعّد لـ perm
       return null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   async function recordFailedAttempt() {
     const banRaw = await redisGet(banKey);
     let ban;
-    try {
-      ban = banRaw ? JSON.parse(banRaw) : { fails: 0, level: "none" };
-    } catch {
-      ban = { fails: 0, level: "none" };
-    }
-
+    try { ban = banRaw ? JSON.parse(banRaw) : { fails: 0, level: 'none' }; }
+    catch { ban = { fails: 0, level: 'none' }; }
+    
     ban.fails = (ban.fails || 0) + 1;
-
+    
     if (ban.fails >= 5) {
-      if (ban.level === "temp") {
-        ban.level = "perm";
+      if (ban.level === 'temp') {
+        ban.level = 'perm';
         delete ban.until;
       } else {
-        ban.level = "temp";
+        ban.level = 'temp';
         ban.until = Date.now() + 86400000;
       }
       ban.fails = 0;
@@ -1118,73 +1241,156 @@ export default async function handler(req, res) {
   }
 
   // ★ البند 1: POST login بدل GET
-  if (req.method === "POST") {
-    // Vercel بتدعم req.body تلقائيًا للـ JSON
-    const pass = (req.body && req.body.password) || "";
-
+  if (req.method === 'POST') {
     // لو مفيش PANEL_PASSWORD محدد
     if (!PANEL_PASSWORD) {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(500).send("<h1>PANEL_PASSWORD not set</h1>");
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(500).send('<h1>PANEL_PASSWORD not set</h1>');
     }
 
     // ★ الحظر الأول — حتى لو الباسورد صح، المحظور مايدخلش
     const banNow = await checkBan();
     if (banNow) {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(429).send(renderLogin({ banMessage: banNow.message }));
     }
 
-    if (typeof pass === "string" && pass === PANEL_PASSWORD) {
-      // نجح → ضع cookie + redirect
+    res.setHeader('Cache-Control', 'no-store');
+    const body = req.body || {};
+    const cookieHdr = req.headers.cookie || '';
+    const clearPending = 'panel_pending=; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+
+    // ★ إجراءات شاشة الإدارة (محتاجة جلسة أدمن صالحة؛ والحظر اتفحص فوق)
+    if (typeof body.action !== 'undefined') {
+      const am = cookieHdr.match(/admin_auth=([^;]+)/);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      if (!verifyToken(am ? am[1] : '', 'admin')) {
+        return res.status(401).send(renderLogin());
+      }
+      if (body.action === 'unban') {
+        const target = typeof body.ip === 'string' ? body.ip.trim() : '';
+        if (/^[0-9a-fA-F:.]{2,45}$|^unknown$/.test(target)) await redisDel('ban:' + target);
+        return res.redirect(303, req.url.split('?')[0]);
+      }
+      if (body.action === 'logout') {
+        res.setHeader('Set-Cookie', 'admin_auth=; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+        return res.redirect(303, req.url.split('?')[0]);
+      }
+      return res.redirect(303, req.url.split('?')[0]);
+    }
+
+    // ★ الخطوة 2: رمز الإيميل
+    if (typeof body.code !== 'undefined') {
+      const code = String(body.code).trim();
+      const pm = cookieHdr.match(/panel_pending=([a-f0-9]{32})/);
+      const otpId = pm ? pm[1] : '';
+      let rec = null;
+      if (otpId) {
+        try { rec = JSON.parse(await redisGet('otp:' + otpId)); } catch { rec = null; }
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      if (!rec || !rec.exp || rec.exp < Date.now() || (rec.tries || 0) >= 5) {
+        if (otpId) await redisDel('otp:' + otpId);
+        res.setHeader('Set-Cookie', clearPending);
+        return res.status(401).send(renderLogin({ error: true, message: '⏱️ الرمز انتهت صلاحيته. اكتبي كلمة السر من جديد.' }));
+      }
+      let ok = false;
+      if (/^[0-9]{6}$/.test(code)) {
+        try { ok = crypto.timingSafeEqual(Buffer.from(hashCode(code, otpId)), Buffer.from(rec.h)); } catch { ok = false; }
+      }
+      if (ok) {
+        await redisDel('otp:' + otpId);
+        await resetFails();
+        const token = makeToken('admin');
+        res.setHeader('Set-Cookie', [
+          `admin_auth=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=7200`,
+          clearPending
+        ]);
+        return res.redirect(303, req.url.split('?')[0]);
+      }
+      rec.tries = (rec.tries || 0) + 1;
+      await redisSet('otp:' + otpId, JSON.stringify(rec));
+      await recordFailedAttempt();
+      const banCode = await checkBan();
+      if (banCode) return res.status(429).send(renderLogin({ mode: 'code', banMessage: banCode.message }));
+      return res.status(401).send(renderLogin({ mode: 'code', error: true, message: '❌ الرمز غلط' }));
+    }
+
+    const pass = typeof body.password === 'string' ? body.password : '';
+
+    // ★ كلمة السر الأولى → دخول مباشر للوحة الإشعارات (من غير إيميل)
+    if (safeEq(pass, PANEL_PASSWORD)) {
       await resetFails();
-      const token = makeToken();
-      res.setHeader(
-        "Set-Cookie",
-        `panel_auth=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`,
-      );
-      return res.redirect(303, req.url.split("?")[0]);
+      const token = makeToken('panel');
+      res.setHeader('Set-Cookie', `panel_auth=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`);
+      return res.redirect(303, req.url.split('?')[0]);
+    }
+
+    // ★ كلمة السر التانية (الأدمن) → نبعت رمز على الإيميل (مفيش دخول لسه)
+    if (ADMIN_PASSWORD && safeEq(pass, ADMIN_PASSWORD)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      // بنقفل الباب لو التحقق بالإيميل مش متظبط (مانسمحش بالدخول بالباسورد لوحده)
+      if (!ADMIN_EMAIL || !RESEND_API_KEY || !redisEnabled) {
+        return res.status(500).send('<h1>التحقق بالإيميل مش متظبط (ADMIN_EMAIL / RESEND_API_KEY / Redis)</h1>');
+      }
+      const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      const id = crypto.randomBytes(16).toString('hex');
+      await redisSet('otp:' + id, JSON.stringify({ h: hashCode(otp, id), exp: Date.now() + OTP_TTL_MS, tries: 0 }));
+      const sent = await sendOtpEmail(otp);
+      if (!sent) {
+        await redisDel('otp:' + id);
+        return res.status(502).send('<h1>مقدرناش نبعت الإيميل. جرّبي تاني بعد شوية.</h1>');
+      }
+      res.setHeader('Set-Cookie', `panel_pending=${id}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=600`);
+      return res.status(200).send(renderLogin({ mode: 'code' }));
     }
 
     // فشل → سجل المحاولة
     await recordFailedAttempt();
     const ban = await checkBan();
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    if (ban)
-      return res.status(429).send(renderLogin({ banMessage: ban.message }));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (ban) return res.status(429).send(renderLogin({ banMessage: ban.message }));
     // ارجع صفحة الدخول مع رسالة خطأ
     return res.status(401).send(renderLogin({ error: true }));
   }
 
   // ★ GET: تأكد من Cookie
-  if (req.method === "GET") {
+  if (req.method === 'GET') {
     // تأكد من الحظر الأول
     const ban = await checkBan();
     if (ban) {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(429).send(renderLogin({ banMessage: ban.message }));
     }
 
+    res.setHeader('Cache-Control', 'no-store');
+    // ★ جلسة الأدمن → شاشة إدارة الحظر
+    const adminMatch = (req.headers.cookie || '').match(/admin_auth=([^;]+)/);
+    if (verifyToken(adminMatch ? adminMatch[1] : '', 'admin')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(renderAdminPage(await listBans(), ip));
+    }
+
     // التحقق من Cookie
-    const cookie = req.headers.cookie || "";
+    const cookie = req.headers.cookie || '';
     const match = cookie.match(/panel_auth=([^;]+)/);
-    const token = match ? match[1] : "";
+    const token = match ? match[1] : '';
 
     if (verifyToken(token)) {
       // ★ البند 6: استبدل الـ placeholder بـ PUBLIC_API_URL
       const htmlWithUrl = PANEL_HTML.replace(
-        "__PUBLIC_API_URL__",
-        PUBLIC_API_URL,
+        '__PUBLIC_API_URL__',
+        PUBLIC_API_URL
       );
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(htmlWithUrl);
     }
 
     // مفيش cookie صالح → اعرض صفحة الدخول
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(401).send(LOGIN_HTML);
   }
 
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  return res.status(405).send("<h1>Method not allowed</h1>");
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(405).send('<h1>Method not allowed</h1>');
 }
