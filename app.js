@@ -941,7 +941,7 @@ var answerEditsLog = [],
       course: "هندسة البرمجيات",
       classType: "lecture",
     },
-  ],
+  ];
 function loadNotifications() {
   try {
     var e = localStorage.getItem("notifications_data");
