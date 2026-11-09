@@ -587,13 +587,25 @@ function _notifInstructorName(s) {
     .replace(/^(?:ا\.?م\.?د|م\.?م|م\.?د|استاذ|دكتور|دكتوره|د|م)\s*[\/.]\s*/, "")
     .trim();
 }
+// ★ صفوف الجدول: من الذاكرة لو اتحمّل، وإلا من آخر نسخة محفوظة (sd.cache.v1)
+// ده عشان الاستهداف مايعتمدش على إن الطالب يفتح شاشة الجدول الأول
+function _notifScheduleRows() {
+  try {
+    var live = (window.dashGetData && window.dashGetData()) || null;
+    if (live && live.schedule && live.schedule.length) return live.schedule;
+    var raw = localStorage.getItem("sd.cache.v1");
+    var c = raw ? JSON.parse(raw) : null;
+    return (c && c.d && c.d.schedule) || [];
+  } catch (err) {
+    return [];
+  }
+}
 // ★ نفس منطق buildTargets بتاع الـ Web Push بالظبط (جدول معتمد ← أو program/section المختارين)
 // بترجع: مصفوفة targets | null لو حصل خطأ
 function getStudentNotifTargets() {
   var targets = [];
   try {
-    var allData = (window.dashGetData && window.dashGetData()) || {};
-    var schedule = allData.schedule || [];
+    var schedule = _notifScheduleRows();
     var pack = function (r) {
       return {
         course: r.course_name_ar || "",
@@ -1921,9 +1933,19 @@ function renderActiveSubList() {
                 : "";
             })
             .join("");
+          var xh = "";
+          try {
+            xh = examQuestionsHTML(n);
+          } catch (x) {
+            _examCtx = null;
+          }
           document.getElementById("questions-lectures-list").innerHTML =
-            a ||
-            '<p style="color:var(--text-hint)">لا توجد أسئلة محاضرات بعد.</p>';
+            xh && !0 !== n.examSections.showLectures
+              ? xh
+              : a
+                ? a + xh
+                : xh ||
+                  '<p style="color:var(--text-hint)">لا توجد أسئلة محاضرات بعد.</p>';
         } else
           "sub-mid" === t.id
             ? (document.getElementById("midterms-list").innerHTML =
@@ -2035,31 +2057,100 @@ function lecCardHTML(e, t, n) {
   );
 }
 /* ===== محتوى الميد / محتوى الفاينل (subject.examSections) ===== */
+var _examCtx = null;
+function examCard(e, t, i) {
+  return _examCtx && _examCtx.card
+    ? _examCtx.card(e, t, i)
+    : lecCardHTML(e, t, i);
+}
+function examOk(i) {
+  return !_examCtx || !_examCtx.only || _examCtx.only(i);
+}
+function examQuestionsHTML(e) {
+  _examCtx = {
+    card: function (e, t, i) {
+      return examCardHTML(
+        e,
+        { t: t.t, d: t.d, pdf: t.pdf2 || t.pdf },
+        "lec",
+        i,
+        t.questions.length,
+        lecExamKey(t),
+      );
+    },
+    only: function (i) {
+      var t = (e.lectures || [])[i];
+      return !!(t && t.questions && t.questions.length);
+    },
+    key: lecExamKey,
+  };
+  try {
+    return examSectionsHTML(e);
+  } finally {
+    _examCtx = null;
+  }
+}
 function examCollect(e, cfg) {
   var lecs = e.lectures || [],
     chapters = [],
     loose = [],
+    rest = [],
     seen = {};
-  ((cfg.chapters || []).forEach(function (nm) {
-    nm = String(nm).trim();
-    var idxs = [];
+  function has(list, t, i) {
+    return list.some(function (ref) {
+      return ref === i || (t && t.id && t.id === ref);
+    });
+  }
+  ((cfg.chapters || []).forEach(function (it) {
+    var obj = it && "object" == typeof it,
+      nm = String(obj ? it.t : it).trim(),
+      pick = obj && Array.isArray(it.lectures) ? it.lectures : null,
+      idxs = [],
+      left = [];
     (lecs.forEach(function (t, i) {
-      lecChapterOf(e, t, i) === nm && idxs.push(i);
+      examOk(i) &&
+        lecChapterOf(e, t, i) === nm &&
+        (!pick || has(pick, t, i) ? idxs.push(i) : left.push(i));
     }),
       idxs.length &&
         (chapters.push({ name: nm, idxs: idxs }),
         idxs.forEach(function (i) {
           seen[i] = !0;
-        })));
+        })),
+      left.length && rest.push({ name: nm, idxs: left }));
   }),
     (cfg.lectures || []).forEach(function (ref) {
       lecs.forEach(function (t, i) {
-        (ref === i || (t && t.id && t.id === ref)) &&
+        has([ref], t, i) &&
           !seen[i] &&
+          examOk(i) &&
           (loose.push(i), (seen[i] = !0));
       });
     }));
-  return { chapters: chapters, loose: loose, seen: seen };
+  return { chapters: chapters, loose: loose, rest: rest, seen: seen };
+}
+function examPartMap(e) {
+  var m = {},
+    cfg = e && e.examSections;
+  if (!cfg) return m;
+  var mc = cfg.midterm ? examCollect(e, cfg.midterm) : null,
+    fc = cfg.final ? examCollect(e, cfg.final) : null;
+  return (
+    fc &&
+      Object.keys(fc.seen).forEach(function (k) {
+        m[k] = "fin";
+      }),
+    mc &&
+      (mc.rest.forEach(function (r) {
+        r.idxs.forEach(function (i) {
+          m[i] = m[i] || (cfg.final ? "fin" : "rest");
+        });
+      }),
+      Object.keys(mc.seen).forEach(function (k) {
+        m[k] = "mid";
+      })),
+    m
+  );
 }
 function examStats(e, idxs) {
   var q = 0,
@@ -2069,7 +2160,12 @@ function examStats(e, idxs) {
       n = (t.questions || []).length;
     ((q += n),
       (d += Math.min(
-        Object.keys(getSavedQuizFor(e, lecQuizKey(t))).length,
+        Object.keys(
+          getSavedQuizFor(
+            e,
+            (_examCtx && _examCtx.key ? _examCtx.key : lecQuizKey)(t),
+          ),
+        ).length,
         n,
       )));
   });
@@ -2086,22 +2182,27 @@ function examSubText(e, seen, chapCount) {
     p.join(" • ")
   );
 }
-function examNotesHTML(cfg) {
+function examNotesHTML(cfg, kk) {
   var n = cfg && cfg.notes;
+  Array.isArray(n) && (n = n.filter(Boolean).join("\n"));
+  n = n ? String(n).trim() : "";
+  if (!n) return "";
+  var ck = (_examCtx ? "q|" : "") + currentSubject + "|notes|" + kk,
+    open = void 0 === _chapOpen[ck] ? !1 !== cfg.notesOpen : _chapOpen[ck];
   return (
-    Array.isArray(n) && (n = n.filter(Boolean).join("\n")),
-    (n = n ? String(n).trim() : ""),
-    n
-      ? '<div class="notes-card"><div class="notes-card-head"><span class="notes-card-icon">📝</span><span class="notes-card-title">ملاحظات</span></div><p class="notes-card-text">' +
-        esc(n) +
-        "</p></div>"
-      : ""
+    '<div class="notes-card exam-notes' +
+    (open ? " open" : "") +
+    '" data-ck="' +
+    escAttr(ck) +
+    '"><div class="notes-card-head" onclick="toggleLecChapter(this)"><span class="notes-card-icon">📝</span><span class="notes-card-title">ملاحظات</span><span class="exam-notes-arrow">▼</span></div><p class="notes-card-text">' +
+    esc(n) +
+    "</p></div>"
   );
 }
-function examChapterHTML(e, name, idxs, prefix) {
+function examChapterHTML(e, name, idxs, prefix, label, cls, tail) {
   var meta = lecChapterMeta(e, name) || {},
     st = examStats(e, idxs),
-    ck = currentSubject + "|" + prefix + "|" + name,
+    ck = (_examCtx ? "q|" : "") + currentSubject + "|" + prefix + "|" + name,
     open =
       void 0 === _chapOpen[ck]
         ? "boolean" == typeof meta.open
@@ -2115,34 +2216,37 @@ function examChapterHTML(e, name, idxs, prefix) {
       (st.q ? " • " + st.d + "/" + st.q + " سؤال" : "");
   return (
     '<div class="lc-cat lec-chapter' +
+    (cls ? " " + cls : "") +
     (open ? " open" : "") +
     '" data-ck="' +
     escAttr(ck) +
     '"><div class="lc-cat-head" onclick="toggleLecChapter(this)"><span class="lc-cat-icon">' +
     esc(meta.icon || "📘") +
     '</span><span class="lc-cat-main"><span class="lc-cat-tt">' +
-    esc(name) +
+    esc(label || name) +
     '</span><span class="lc-cat-dd">' +
     esc(dd) +
     (dd ? " — " : "") +
     sub +
+    esc(tail || "") +
     '</span></span><span class="link-arrow">▶</span></div><div class="lc-cat-body"><div class="lc-cat-links">' +
     idxs
       .map(function (i) {
-        return lecCardHTML(e, e.lectures[i], i);
+        return examCard(e, e.lectures[i], i);
       })
       .join("") +
     "</div></div></div>"
   );
 }
 function examBlockHTML(o) {
-  var open = void 0 === _chapOpen[o.ck] ? !!o.open : _chapOpen[o.ck];
+  var ck = (_examCtx ? "q|" : "") + o.ck,
+    open = void 0 === _chapOpen[ck] ? !!o.open : _chapOpen[ck];
   return (
     '<div class="lc-cat exam-sec ' +
     o.cls +
     (open ? " open" : "") +
     '" data-ck="' +
-    escAttr(o.ck) +
+    escAttr(ck) +
     '"><div class="lc-cat-head" onclick="toggleLecChapter(this)"><span class="lc-cat-icon">' +
     esc(o.icon) +
     '</span><span class="lc-cat-main"><span class="lc-cat-tt">' +
@@ -2160,9 +2264,58 @@ function examBodyHTML(e, col, prefix) {
     h += examChapterHTML(e, c.name, c.idxs, prefix);
   }),
     col.loose.forEach(function (i) {
-      h += lecCardHTML(e, e.lectures[i], i);
+      h += examCard(e, e.lectures[i], i);
     }));
   return h;
+}
+function examRestHTML(e, mid, midCol, fin) {
+  var skip = {};
+  (fin && fin.chapters ? fin.chapters : []).forEach(function (it) {
+    skip[String(it && "object" == typeof it ? it.t : it).trim()] = !0;
+  });
+  return midCol.rest
+    .filter(function (r) {
+      return !skip[r.name];
+    })
+    .map(function (r) {
+      return examChapterHTML(
+        e,
+        r.name,
+        r.idxs,
+        "rest",
+        r.name + " (باقي الفصل)",
+        "exam-rest",
+        fin ? " • تبع الفاينل" : "",
+      );
+    })
+    .join("");
+}
+function examOthersHTML(e, covered) {
+  var lecs = e.lectures || [],
+    names = [],
+    byName = {},
+    loose = [];
+  lecs.forEach(function (t, i) {
+    if (!covered[i] && examOk(i)) {
+      var nm = lecChapterOf(e, t, i);
+      nm
+        ? (byName[nm] || ((byName[nm] = []), names.push(nm)),
+          byName[nm].push(i))
+        : loose.push(i);
+    }
+  });
+  var h =
+    names
+      .map(function (nm) {
+        return examChapterHTML(e, nm, byName[nm], "other");
+      })
+      .join("") +
+    loose
+      .map(function (i) {
+        return examCard(e, lecs[i], i);
+      })
+      .join("");
+  return h ? '<div class="exam-others-title">باقي المحاضرات</div>' + h : "";
 }
 function examSectionsHTML(e) {
   var cfg = e && e.examSections;
@@ -2179,20 +2332,21 @@ function examSectionsHTML(e) {
   if (
     (midHas &&
       !withMid &&
-      (h += examBlockHTML({
-        ck: currentSubject + "|exam-mid",
-        cls: "exam-sec-mid",
-        icon: mid.icon || "📝",
-        title: mid.title || "محتوى الميد",
-        sub: examSubText(e, midCol.seen, midCol.chapters.length),
-        open: !0 === mid.open,
-        inner: examNotesHTML(mid) + examBodyHTML(e, midCol, "mid"),
-      })),
+      (h +=
+        examBlockHTML({
+          ck: currentSubject + "|exam-mid",
+          cls: "exam-sec-mid",
+          icon: mid.icon || "📝",
+          title: mid.title || "محتوى الميد",
+          sub: examSubText(e, midCol.seen, midCol.chapters.length),
+          open: !0 === mid.open,
+          inner: examNotesHTML(mid, "mid") + examBodyHTML(e, midCol, "mid"),
+        }) + examRestHTML(e, mid, midCol, fin)),
     fin && (finHas || withMid))
   ) {
     var seen = {},
       chapCount = finHas ? finCol.chapters.length : 0,
-      inner = examNotesHTML(fin);
+      inner = examNotesHTML(fin, "fin");
     (finHas &&
       Object.keys(finCol.seen).forEach(function (k) {
         seen[k] = !0;
@@ -2209,8 +2363,15 @@ function examSectionsHTML(e) {
           title: mid.title || "محتوى الميد",
           sub: examSubText(e, midCol.seen, midCol.chapters.length),
           open: !0 === fin.midtermOpen,
-          inner: examNotesHTML(mid) + examBodyHTML(e, midCol, "finmid"),
-        }))),
+          inner:
+            examNotesHTML(mid, "finmid") + examBodyHTML(e, midCol, "finmid"),
+        })),
+        (inner += examRestHTML(e, mid, midCol, fin)),
+        midCol.rest.forEach(function (r) {
+          r.idxs.forEach(function (i) {
+            seen[i] = !0;
+          });
+        })),
       finHas && (inner += examBodyHTML(e, finCol, "fin")),
       (h += examBlockHTML({
         ck: currentSubject + "|exam-fin",
@@ -2221,6 +2382,22 @@ function examSectionsHTML(e) {
         open: !0 === fin.open,
         inner: inner,
       })));
+  }
+  if (h && !1 !== cfg.showOthers) {
+    var cov = {};
+    ([midCol, finCol].forEach(function (c) {
+      c &&
+        Object.keys(c.seen).forEach(function (k) {
+          cov[k] = !0;
+        });
+    }),
+      midCol &&
+        midCol.rest.forEach(function (r) {
+          r.idxs.forEach(function (i) {
+            cov[i] = !0;
+          });
+        }),
+      (h += examOthersHTML(e, cov)));
   }
   return h ? '<div class="exam-secs">' + h + "</div>" : "";
 }
@@ -4988,7 +5165,8 @@ function pgSolved(e, t, n) {
   );
 }
 function pgCalc(e) {
-  var t = { lecs: [], solved: 0, total: 0, scores: [] };
+  var t = { lecs: [], solved: 0, total: 0, scores: [] },
+    pm = examPartMap(e);
   return (
     (e.lectures || []).forEach(function (n, a) {
       var r = n.questions || [],
@@ -5016,6 +5194,7 @@ function pgCalc(e) {
           solved: s,
           score: c,
           chapter: lecChapterOf(e, n, a),
+          part: pm[a] || "",
         }),
         (t.solved += s),
         (t.total += i),
@@ -5206,12 +5385,27 @@ function pgDraw(e, t) {
         f =
           d.lecs
             .map(function (t) {
-              var n = "";
+              var n = "",
+                k = (t.chapter || "") + "|" + (t.part || "");
               return (
-                t.chapter &&
-                  t.chapter !== p &&
-                  (n = '<div class="pg-chap">📘 ' + esc(t.chapter) + "</div>"),
-                (p = t.chapter || p),
+                (t.chapter || t.part) &&
+                  k !== p &&
+                  (n =
+                    '<div class="pg-chap">' +
+                    (t.chapter ? "📘 " + esc(t.chapter) : "") +
+                    (t.part
+                      ? ' <span class="pg-part ' +
+                        t.part +
+                        '">' +
+                        ("mid" === t.part
+                          ? "تبع الميد"
+                          : "rest" === t.part
+                            ? "باقي الفصل"
+                            : "تبع الفاينل") +
+                        "</span>"
+                      : "") +
+                    "</div>"),
+                (p = t.chapter || t.part ? k : p),
                 n +
                   '<div class="pg-row" onclick="pgOpenLecture(' +
                   e +
@@ -8848,8 +9042,16 @@ function __bootDept2() {
   function buildTargets() {
     try {
       var confirmed = window.mysConfirmed;
-      var allData = (window.dashGetData && window.dashGetData()) || {};
-      var schedule = allData.schedule || [];
+      var schedule = _notifScheduleRows();
+      var hasConfirmed = !!(confirmed && confirmed.ids && confirmed.ids.length);
+      var psChk = getProgSec();
+      // ★ فيه اختيار (جدول معتمد أو قسم/سكشن) بس الجدول نفسه مش متاح → null
+      // (عشان المزامنة الصامتة ماتمسحش الاستهداف المتسجّل بقايمة فاضية)
+      if (
+        !schedule.length &&
+        (hasConfirmed || (psChk.program && psChk.section))
+      )
+        return null;
 
       // 1) لو فيه جدول معتمد → نبني targets منه
       if (confirmed && confirmed.ids && confirmed.ids.length) {
@@ -8881,7 +9083,7 @@ function __bootDept2() {
           var row = schedule[j];
           if (!row || !row.program || row.program !== ps.program) continue;
           // section في الجدول ممكن يكون "1 2 3" — نشوف لو section الطالب فيه
-          var sections = String(row.section || "").split(/\s+/);
+          var sections = String(row.section || "").split(/[\s,]+/);
           if (sections.indexOf(ps.section) === -1) continue;
           targets2.push({
             course: row.course_name_ar || "",
@@ -8915,18 +9117,22 @@ function __bootDept2() {
     }
   }
 
-  function sendSub(sub) {
+  function sendSub(sub, silent) {
     var ps = getProgSec();
+    var tg = buildTargets();
+    // مزامنة صامتة والجدول مش متاح → نسيب الاستهداف المتسجّل زي ما هو
+    if (tg === null && silent === true) return Promise.resolve();
+    var payload = {
+      subscription: sub.toJSON(),
+      dept: curDept(),
+      program: ps.program, // ★ دايمًا نبعت program/section حتى لو ما أكدش
+      section: ps.section,
+    };
+    if (tg !== null) payload.targets = tg;
     return fetch(API_BASE + "/api/push-subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subscription: sub.toJSON(),
-        dept: curDept(),
-        targets: buildTargets(),
-        program: ps.program, // ★ دايمًا نبعت program/section حتى لو ما أكدش
-        section: ps.section,
-      }),
+      body: JSON.stringify(payload),
     }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
     });
@@ -9112,7 +9318,7 @@ function __bootDept2() {
         return reg && reg.pushManager.getSubscription();
       })
       .then(function (s) {
-        if (s) return sendSub(s);
+        if (s) return sendSub(s, true);
       })
       .catch(function () {});
   }

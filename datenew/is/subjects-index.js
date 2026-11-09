@@ -14,7 +14,7 @@ var SUBJECTS_INDEX = [
     icon: "📋",
     slug: "advanced-project-management",
     file: "datenew/subjects/advanced-project-management/advanced-project-management.js",
-    active: false,
+    active: true,
   },
   {
     name: "الرسم بالحاسب",
