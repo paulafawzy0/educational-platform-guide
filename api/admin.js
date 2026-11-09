@@ -2,7 +2,26 @@
 //  api/admin.js — لوحة الإشعارات المحمية بكلمة سر
 //  كلمة سر اللوحة من PANEL_PASSWORD في Environment Variables
 //  (مختلفة عن ADMIN_SECRET اللي بتبعت بيها الإشعارات)
+//
+//  Environment Variables:
+//   PANEL_PASSWORD, ADMIN_PASSWORD, ADMIN_EMAIL, RESEND_API_KEY, OTP_FROM(اختياري)
+//   UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN, PUBLIC_API_URL
+//   ★ جديد:
+//   ALLOWED_ORIGIN      — الـ origin الوحيد المسموح له بـ CORS (مثال https://your-domain.vercel.app)
+//                         لو فاضي: مفيش CORS خالص (same-origin بس)
+//   TELEGRAM_BOT_TOKEN  — توكن بوت التنبيهات (اختياري)
+//   TELEGRAM_CHAT_ID    — الشات اللي بتوصله التنبيهات (اختياري)
+//   OWNER_IPS           — IPs صاحبة النظام (IPv4/IPv6 مفصولين بفاصلة) — مابتتحظرش أبدًا (لسه محتاجة الباسورد)
+//   RECOVERY_CODE       — كود طوارئ (52 حرف عشوائي على الأقل) بيتجاوز فحص الحظر بس: /api/admin?recovery=CODE
+//                         لسه محتاج ADMIN_PASSWORD + رمز الإيميل. لو أقل من 52 حرف الميزة بتتعطّل.
+//   RECOVERY_IPS        — IPs المسموح لها تستخدم RECOVERY_CODE (مفصولين بفاصلة، IPv6 → /64).
+//                         فاضي = الـ recovery مقفول تمامًا (fail-closed)
+//   PANEL_IPS           — IPs مسموح لها بالدخول لما "بوابة الدخول" تكون مفعلة (من شاشة الأدمن، مقفولة افتراضيًا).
+//                         لما البوابة تتفعّل: أي IP مش في (PANEL_IPS + OWNER_IPS + وايت ليست + IPs مسموحة من الشاشة
+//                         + recovery) → 404 على كل حاجة. الحالة في Redis: panel_gate:enabled (مش موجود = مقفولة)
 // ============================================================
+import { isIP } from 'net';
+
 
 const PANEL_HTML = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -976,23 +995,135 @@ function renderLogin({ error = false, banMessage = '', mode = 'password', messag
   return html;
 }
 
+// ★ تفكيك IPv6 لـ 8 مجموعات (أرقام) — null لو الصيغة غلط
+function expandIPv6(ip) {
+  let s = String(ip).split('%')[0].toLowerCase();
+  const m = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/); // ذيل IPv4 (::ffff:1.2.3.4)
+  if (m) {
+    const o = m[2].split('.').map(Number);
+    if (o.length !== 4 || o.some((n) => !(n >= 0 && n <= 255))) return null;
+    s = m[1] + ((o[0] << 8) | o[1]).toString(16) + ':' + ((o[2] << 8) | o[3]).toString(16);
+  }
+  let groups;
+  if (s.indexOf('::') !== -1) {
+    const parts = s.split('::');
+    if (parts.length !== 2) return null;
+    const head = parts[0] ? parts[0].split(':') : [];
+    const tail = parts[1] ? parts[1].split(':') : [];
+    const fill = 8 - head.length - tail.length;
+    if (fill < 1) return null;
+    groups = head.concat(Array(fill).fill('0'), tail);
+  } else {
+    groups = s.split(':');
+  }
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => parseInt(g, 16));
+}
+
+// ★ البند 4: مفتاح الحظر — IPv4 زي ما هو، IPv6 على مستوى /64 (أول 4 مجموعات)
+function banPrefix(ip) {
+  ip = String(ip || '');
+  if (ip.indexOf(':') === -1) return ip;
+  const g = expandIPv6(ip);
+  if (!g) return ip;
+  // ::ffff:a.b.c.d (IPv4-mapped بصيغة hex) → نرجعه IPv4 عشان مايتجمّعوش كلهم في prefix واحد
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) {
+    return [g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join('.');
+  }
+  return g.slice(0, 4).map((x) => x.toString(16)).join(':') + '::';
+}
+
+// عرض المفتاح للأدمن (IPv6 → /64)
+function shownKey(k) {
+  return String(k).slice(-2) === '::' ? k + '/64' : k;
+}
+
+// IP يكتبه الأدمن → مفتاح موحّد (أو '' لو مش IP صالح)
+function normalizeIpInput(v) {
+  const t = String(v || '').trim().replace(/%.*$/, '').replace(/\/64$/, '')
+    .replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i, '$1');
+  return isIP(t) ? banPrefix(t) : '';
+}
+
+// تنظيف نص حر (ملاحظة/سبب): بدون محارف تحكم وبحد أقصى للطول
+function cleanText(v, max) {
+  return String(v == null ? '' : v).replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, max);
+}
+
 function escapeHtml(v) {
   return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function renderAdminPage(bans, currentIp) {
+function renderAdminPage(d, currentKey) {
+  const e = escapeHtml;
   const fmt = (t) => new Date(t).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
-  const rows = bans.length ? bans.map((b) => {
+  const me = (k) => (k === currentKey ? ' <span class="me">(ده الـ IP بتاعك)</span>' : '');
+  const post = (action, fields, label, cls) =>
+    '<form method="POST" action="/api/admin"><input type="hidden" name="action" value="' + action + '">' +
+    Object.keys(fields).map((k) => '<input type="hidden" name="' + k + '" value="' + e(fields[k]) + '">').join('') +
+    '<button type="submit" class="' + (cls || '') + '">' + label + '</button></form>';
+
+  // ✅ القائمة البيضاء
+  const wlRows = d.whitelist.length ? d.whitelist.map((w) =>
+    '<tr><td dir="ltr">' + e(shownKey(w.ip)) + me(w.ip) + '</td><td>' + e(w.note || '—') + '</td><td dir="ltr">' + e(w.addedBy || '—') +
+    '</td><td>' + e(w.addedAt ? fmt(w.addedAt) : '—') + '</td><td>' + (w.expiresAt ? e(fmt(w.expiresAt)) : 'دائم') +
+    '</td><td>' + post('wl_del', { ip: w.ip }, '🗑️ حذف', 'del') + '</td></tr>'
+  ).join('') : '<tr><td colspan="6" class="empty">القائمة فاضية</td></tr>';
+
+  // 🌐 IPs المسموح لها بشاشة الأدمن (temp access)
+  const piRows = d.panelIps.length ? d.panelIps.map((p) =>
+    '<tr><td dir="ltr">' + e(shownKey(p.ip)) + me(p.ip) + '</td><td>' + e(p.note || '—') + '</td><td dir="ltr">' + e(p.addedBy || '—') +
+    '</td><td>' + e(p.addedAt ? fmt(p.addedAt) : '—') + '</td><td>' + (p.expiresAt ? e(fmt(p.expiresAt)) : '⚠️ دائم') +
+    '</td><td>' + post('panel_ip_del', { ip: p.ip }, '🗑️ حذف', 'del') + '</td></tr>'
+  ).join('') : '<tr><td colspan="6" class="empty">مفيش IPs مضافة من هنا</td></tr>';
+
+  // 🚫 القائمة السوداء
+  const blRows = d.blacklist.length ? d.blacklist.map((b) =>
+    '<tr><td dir="ltr">' + e(shownKey(b.ip)) + me(b.ip) + '</td><td>' + e(b.reason || '—') + '</td><td dir="ltr">' + e(b.addedBy || '—') +
+    '</td><td>' + e(b.addedAt ? fmt(b.addedAt) : '—') +
+    '</td><td>' + post('bl_del', { ip: b.ip }, '🗑️ حذف', 'del') + '</td></tr>'
+  ).join('') : '<tr><td colspan="5" class="empty">القائمة فاضية</td></tr>';
+
+  // ⛔ جدول الحظر
+  const banRows = d.bans.length ? d.bans.map((b) => {
     let status;
     if (b.level === 'perm') status = '🚫 دائم';
-    else if (b.level === 'temp' && b.until > Date.now()) status = '⏳ مؤقت — ينتهي ' + escapeHtml(fmt(b.until));
+    else if (b.level === 'temp' && b.until > Date.now()) status = '⏳ مؤقت — ينتهي ' + e(fmt(b.until));
     else if (b.level === 'temp') status = '⌛ المؤقت انتهى (أي 5 محاولات غلط تانية = دائم)';
-    else status = '⚠️ محاولات فاشلة بس (' + escapeHtml(b.fails || 0) + ')';
-    const me = b.ip === currentIp ? ' <span class="me">(ده الـ IP بتاعك)</span>' : '';
-    return '<tr><td dir="ltr">' + escapeHtml(b.ip) + me + '</td><td>' + status + '</td><td>' +
-      '<form method="POST" action="/api/admin"><input type="hidden" name="action" value="unban">' +
-      '<input type="hidden" name="ip" value="' + escapeHtml(b.ip) + '"><button type="submit">🔓 فك الحظر</button></form></td></tr>';
+    else status = '⚠️ محاولات فاشلة بس (' + e(b.fails || 0) + ')';
+    return '<tr><td dir="ltr">' + e(shownKey(b.ip)) + me(b.ip) + '</td><td>' + status + '</td><td>' + post('unban', { ip: b.ip }, '🔓 فك الحظر') + '</td></tr>';
   }).join('') : '<tr><td colspan="3" class="empty">مفيش أي IP محظور حاليًا ✅</td></tr>';
+
+  // 📜 سجل العمليات
+  const labels = {
+    login_ok: '✅ دخول ناجح', login_fail: '❌ كلمة سر غلط', otp_sent: '📧 إرسال رمز', otp_fail: '❌ رمز غلط',
+    ban_temp: '⏳ حظر مؤقت', ban_perm: '🚫 حظر دائم', unban: '🔓 فك حظر', logout: '🚪 خروج',
+    whitelist_add: '✅ إضافة للبيضاء', whitelist_del: '🗑️ حذف من البيضاء', whitelist_expired: '⌛ انتهاء بيضاء',
+    blacklist_add: '🚫 إضافة للسوداء', blacklist_del: '🗑️ حذف من السوداء',
+    owner_fail: '⚠️ غلطة من IP صاحبة النظام', recovery_used: '🆘 استخدام رابط الطوارئ', otp_cooldown: '⏳ وقف ساعة (رمز)',
+    panel_ip_rejected: '🚫 محاولة دخول من IP غير مسموح', panel_ip_temp_add: '🌐 إضافة IP مؤقت', panel_ip_temp_del: '🗑️ حذف IP مؤقت',
+    recovery_ip_rejected: '⚠️ Recovery من IP غير مسموح', panel_ips_misconfig: '⚠️ PANEL_IPS كلها غلط',
+    panel_gate_on: '🟢 تفعيل بوابة الدخول', panel_gate_off: '🔴 إلغاء بوابة الدخول'
+  };
+  const detailsOf = (r) => Object.keys(r).filter((k) => k !== 't' && k !== 'a' && k !== 'ip')
+    .map((k) => e(k) + ': ' + e(r[k])).join(' • ');
+  const auRows = d.audit.length ? d.audit.map((r) =>
+    '<tr><td>' + e(r.t ? fmt(r.t) : '—') + '</td><td>' + e(labels[r.a] || r.a) + '</td><td dir="ltr">' + e(r.ip || '—') + '</td><td>' + (detailsOf(r) || '—') + '</td></tr>'
+  ).join('') : '<tr><td colspan="4" class="empty">لسه مفيش عمليات مسجلة</td></tr>';
+
+  // 🚪 بوابة الدخول (ON/OFF)
+  const gateSection =
+    '<h2 class="gt">🚪 بوابة الدخول</h2>' +
+    '<p class="sub">الحالة: <b>' + (d.gateOn ? '🟢 مفعلة' : '🔴 مقفولة') + '</b> — ' +
+    (d.gateOn
+      ? 'أي IP مش في القوايم (PANEL_IPS / OWNER_IPS / الوايت ليست / IPs المسموحة / recovery) بيشوف 404 على كل حاجة. لو حد جديد عايز يدخل، ضيفيه في الوايت ليست وهتتفتح له فورًا.'
+      : 'كل الناس بتشوف صفحة الدخول. فعّليها لما الـ users يدخلوا ويستخدموا النظام الأول.') + '</p>' +
+    post('panel_gate_toggle', { to: d.gateOn ? 'off' : 'on' }, d.gateOn ? '🔴 إلغاء البوابة' : '🟢 تفعيل البوابة', d.gateOn ? 'del' : '');
+
+  const addForm = (action, second, secondPh, extra) =>
+    '<form method="POST" action="/api/admin" class="add"><input type="hidden" name="action" value="' + action + '">' +
+    '<input name="ip" dir="ltr" placeholder="IP" required maxlength="45">' +
+    '<input name="' + second + '" placeholder="' + secondPh + '"' + (extra || '') + ' maxlength="120">';
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -1004,28 +1135,75 @@ function renderAdminPage(bans, currentIp) {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 16px; }
-  .box { max-width: 720px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 24px; }
+  .box { max-width: 980px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 24px; }
   h1 { font-size: 22px; color: #38bdf8; margin-bottom: 6px; }
-  p.sub { color: #94a3b8; font-size: 13px; margin-bottom: 18px; }
+  h2 { font-size: 17px; margin: 26px 0 6px; }
+  h2.gt { color: #c4b5fd; } h2.pi { color: #38bdf8; } h2.wl { color: #34d399; } h2.bl { color: #f87171; } h2.bn { color: #fbbf24; } h2.au { color: #a5b4fc; }
+  p.sub { color: #94a3b8; font-size: 13px; margin-bottom: 10px; }
   .wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: right; vertical-align: middle; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px; border-bottom: 1px solid #334155; text-align: right; vertical-align: middle; }
   th { color: #94a3b8; font-weight: 700; }
-  td.empty { text-align: center; color: #94a3b8; padding: 24px; }
+  td.empty { text-align: center; color: #94a3b8; padding: 20px; }
   .me { color: #fbbf24; font-size: 12px; }
-  button { padding: 8px 14px; font-size: 14px; font-weight: 700; font-family: inherit; background: #059669; color: #fff; border: 0; border-radius: 8px; cursor: pointer; }
+  button { padding: 8px 14px; font-size: 13px; font-weight: 700; font-family: inherit; background: #059669; color: #fff; border: 0; border-radius: 8px; cursor: pointer; }
   button:hover { background: #047857; }
-  button.out { background: #475569; margin-top: 18px; }
+  button.del { background: #b91c1c; } button.del:hover { background: #991b1b; }
+  button.out { background: #475569; margin-top: 22px; }
+  form.add { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
+  form.add input, form.add select { padding: 8px 10px; font-size: 13px; font-family: inherit; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; }
+  form.add input[name=ip] { width: 190px; } form.add input:not([name=ip]) { flex: 1; min-width: 150px; }
 </style>
 </head>
 <body>
 <div class="box">
-  <h1>🛡️ إدارة المحظورين</h1>
+  <h1>🛡️ إدارة الدخول</h1>
+  <p class="sub">عناوين IPv6 بتتطبق على الـ /64 كله. القائمة السوداء بتتغلب على البيضاء.</p>
+
+  ${gateSection}
+
+  <h2 class="wl">✅ القائمة البيضاء</h2>
+  <p class="sub">IP هنا مابيتحظرش أبدًا (بس لسه محتاج كلمة السر). ولما بوابة الدخول تكون مفعلة، الوايت ليست بتفتحله الدخول كمان.</p>
+  ${addForm('wl_add', 'note', 'ملاحظة (اختياري)')}
+    <select name="duration"><option value="perm">دائم</option><option value="1h">ساعة</option><option value="1d">يوم</option><option value="1w">أسبوع</option></select>
+    <button type="submit">➕ إضافة</button></form>
+  <div class="wrap"><table>
+    <tr><th>الـ IP</th><th>ملاحظة</th><th>أضيف بواسطة</th><th>تاريخ الإضافة</th><th>ينتهي</th><th></th></tr>
+    ${wlRows}
+  </table></div>
+
+  <h2 class="pi">🌐 IPs المسموح لها بالدخول</h2>
+  <p class="sub">دي IPs مسموح لها بالدخول لما البوابة تكون مفعلة (بالإضافة للي في الـ env والوايت ليست). ⚠️ "دائم" بيفضل مفتوح لحد ما تمسحيه (حد أقصى 10). مش هتقدري تمسحي الـ IP اللي بتدخلي منه لو هو السبب الوحيد في دخولك.</p>
+  ${addForm('panel_ip_add', 'note', 'ملاحظة (اختياري)')}
+    <select name="duration"><option value="1h">ساعة</option><option value="1d">يوم</option><option value="1w">أسبوع</option><option value="perm">دائم ⚠️</option></select>
+    <button type="submit">➕ إضافة</button></form>
+  <div class="wrap"><table>
+    <tr><th>الـ IP</th><th>ملاحظة</th><th>أضيف بواسطة</th><th>تاريخ الإضافة</th><th>ينتهي</th><th></th></tr>
+    ${piRows}
+  </table></div>
+
+  <h2 class="bl">🚫 القائمة السوداء</h2>
+  <p class="sub">IP هنا محظور فورًا ودائمًا — حتى لو معاه الباسورد الصح.</p>
+  ${addForm('bl_add', 'reason', 'السبب (إجباري)', ' required')}
+    <button type="submit" class="del">➕ حظر</button></form>
+  <div class="wrap"><table>
+    <tr><th>الـ IP</th><th>السبب</th><th>أضيف بواسطة</th><th>تاريخ الإضافة</th><th></th></tr>
+    ${blRows}
+  </table></div>
+
+  <h2 class="bn">⛔ المحظورين تلقائيًا</h2>
   <p class="sub">فك الحظر بيمسح سجل الـ IP بالكامل (يبدأ من الأول).</p>
   <div class="wrap"><table>
     <tr><th>الـ IP</th><th>الحالة</th><th></th></tr>
-    ${rows}
+    ${banRows}
   </table></div>
+
+  <h2 class="au">📜 آخر 100 عملية</h2>
+  <div class="wrap"><table>
+    <tr><th>الوقت</th><th>العملية</th><th>الـ IP</th><th>تفاصيل</th></tr>
+    ${auRows}
+  </table></div>
+
   <form method="POST" action="/api/admin"><input type="hidden" name="action" value="logout"><button class="out" type="submit">تسجيل خروج</button></form>
 </div>
 </body>
@@ -1033,19 +1211,58 @@ function renderAdminPage(bans, currentIp) {
 }
 
 export default async function handler(req, res) {
-  // ★ البند 4: X-Robots-Tag
-  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
   // ★ البند 6: apiUrl من env var
   const PUBLIC_API_URL = process.env.PUBLIC_API_URL || '';
-  
+  let apiOrigin = '';
+  try { apiOrigin = PUBLIC_API_URL ? new URL(PUBLIC_API_URL).origin : ''; } catch {}
+
+  // ★ رؤوس الأمان (على كل الردود)
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  // الصفحات فيها inline style/script → 'unsafe-inline' (مفيش موارد خارجية)؛ connect-src للـ API بتاع الإشعارات بس
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'none'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    "connect-src 'self'" + (apiOrigin ? ' ' + apiOrigin : ''),
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "object-src 'none'"
+  ].join('; '));
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Origin');
+
+  // ★ البند 2: CORS مقيّد بـ origin واحد من ALLOWED_ORIGIN (ولو مش متظبط: same-origin بس)
+  const ALLOWED_ORIGIN = (process.env.ALLOWED_ORIGIN || '').trim();
+  const reqOrigin = String(req.headers.origin || '');
+  const originAllowed = !!ALLOWED_ORIGIN && reqOrigin === ALLOWED_ORIGIN;
+  if (originAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', reqOrigin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') {
+    return originAllowed ? res.status(204).end() : res.status(403).end();
+  }
+  // POST جاي من موقع تاني → مرفوض (Sec-Fetch-Site بيتبعت حتى مع Referrer-Policy: no-referrer)
+  if (req.method === 'POST') {
+    const sfs = String(req.headers['sec-fetch-site'] || '');
+    const crossSite = sfs && sfs !== 'same-origin' && sfs !== 'none';
+    const badOrigin = reqOrigin && reqOrigin !== 'null' &&
+      reqOrigin !== 'https://' + String(req.headers.host || '');
+    if (!originAllowed && (crossSite || badOrigin)) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(403).send('Forbidden');
+    }
+  }
+
   // ★ البند 2: HMAC-SHA256 للـ Cookie
   const crypto = await import('crypto');
   const PANEL_PASSWORD = process.env.PANEL_PASSWORD || '';
@@ -1086,79 +1303,157 @@ export default async function handler(req, res) {
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '';
   const redisEnabled = !!(redisUrl && redisToken);
 
+  // ★ timeout على كل طلب Redis (2.5 ثانية) + قاطع: أول timeout في الطلب → باقي نداءات Redis في نفس الطلب بتتخطى فورًا
+  //   (fail-open زي أي فشل تاني). من غير ده Redis المعلّق كان بيخلّي الطلب يستنى لحد حد Vercel ويرد 504
+  const REDIS_TIMEOUT_MS = 2500;
+  let redisDead = false;
+  async function redisJson(url, opt) {
+    if (redisDead) return null;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), REDIS_TIMEOUT_MS);
+    try {
+      const r = await fetch(url, { ...opt, signal: ctl.signal });
+      return await r.json();   // قراءة الـ body جوه نفس الـ timeout
+    } catch (e) {
+      if (ctl.signal.aborted) redisDead = true;
+      return null;
+    } finally { clearTimeout(timer); }
+  }
+
   async function redisGet(key) {
     if (!redisEnabled) return null;
-    try {
-      const r = await fetch(`${redisUrl}/get/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${redisToken}` }
-      });
-      const data = await r.json();
-      return data.result;
-    } catch { return null; }
+    const data = await redisJson(`${redisUrl}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${redisToken}` }
+    });
+    return data ? data.result : null;
   }
 
   async function redisSet(key, value) {
-    if (!redisEnabled) return;
-    try {
-      await fetch(`${redisUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
-        headers: { Authorization: `Bearer ${redisToken}` }
-      });
-    } catch {}
+    if (!redisEnabled) return false;
+    return (await redisCmd(['SET', key, String(value)])) === 'OK';
   }
 
   async function redisCmd(cmd) {
     if (!redisEnabled) return null;
-    try {
-      const r = await fetch(redisUrl, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(cmd)
-      });
-      return (await r.json()).result;
-    } catch { return null; }
+    const out = await redisJson(redisUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cmd)
+    });
+    return out ? out.result : null;
   }
 
   async function redisPipeline(cmds) {
     if (!redisEnabled || !cmds.length) return [];
-    try {
-      const r = await fetch(`${redisUrl}/pipeline`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(cmds)
-      });
-      return await r.json();
-    } catch { return []; }
+    const out = await redisJson(`${redisUrl}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cmds)
+    });
+    return Array.isArray(out) ? out : [];
   }
 
-  async function listBans() {
+  // SCAN عام لأي pattern
+  async function scanKeys(pattern) {
     const keys = [];
     let cursor = '0';
     for (let i = 0; i < 50; i++) {
-      const out = await redisCmd(['SCAN', cursor, 'MATCH', 'ban:*', 'COUNT', '200']);
+      const out = await redisCmd(['SCAN', cursor, 'MATCH', pattern, 'COUNT', '200']);
       if (!out) break;
       cursor = String(out[0]);
       keys.push(...out[1]);
       if (cursor === '0') break;
     }
+    return keys;
+  }
+
+  async function getJsonMany(keys) {
     const vals = await redisPipeline(keys.map((k) => ['GET', k]));
+    return keys.map((k, i) => {
+      try { return { key: k, val: JSON.parse(vals[i] && vals[i].result) }; }
+      catch { return { key: k, val: null }; }
+    });
+  }
+
+  async function listBans() {
+    const rows = await getJsonMany(await scanKeys('ban:*'));
     const bans = [];
-    keys.forEach((k, i) => {
-      try {
-        const b = JSON.parse(vals[i] && vals[i].result);
-        if (b && (b.level === 'temp' || b.level === 'perm' || b.fails > 0)) bans.push({ ip: k.slice(4), ...b });
-      } catch {}
+    rows.forEach(({ key, val: b }) => {
+      if (b && (b.level === 'temp' || b.level === 'perm' || b.fails > 0)) bans.push({ ip: key.slice(4), ...b });
     });
     const rank = (b) => (b.level === 'perm' ? 0 : b.level === 'temp' ? 1 : 2);
     return bans.sort((x, y) => rank(x) - rank(y));
   }
 
-  async function redisDel(key) {
+  // ✅ البيضاء: المنتهية تتنضف أول ما تتشاف
+  async function listWhitelist() {
+    const rows = await getJsonMany(await scanKeys('whitelist:*'));
+    const out = [];
+    for (const { key, val: w } of rows) {
+      if (!w) continue;
+      if (w.expiresAt && w.expiresAt <= Date.now()) {
+        await redisDel(key);
+        await auditLog('whitelist_expired', { target: key.slice(10) });
+        continue;
+      }
+      out.push({ ip: key.slice(10), ...w });
+    }
+    return out.sort((x, y) => (y.addedAt || 0) - (x.addedAt || 0));
+  }
+
+  async function listBlacklist() {
+    const rows = await getJsonMany(await scanKeys('blacklist:*'));
+    return rows.filter((r) => r.val).map((r) => ({ ip: r.key.slice(10), ...r.val }))
+      .sort((x, y) => (y.addedAt || 0) - (x.addedAt || 0));
+  }
+
+  // ★ البند 7: Audit Log (آخر 1000 عملية، بنعرض آخر 100)
+  async function auditLog(action, details = {}) {
     if (!redisEnabled) return;
     try {
-      await fetch(`${redisUrl}/del/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${redisToken}` }
+      const rec = { t: Date.now(), a: action, ip: ip || 'unknown' };
+      Object.keys(details).forEach((k) => {
+        rec[k] = typeof details[k] === 'string' ? details[k].slice(0, 200) : details[k];
       });
+      await redisPipeline([['LPUSH', 'audit:log', JSON.stringify(rec)], ['LTRIM', 'audit:log', '0', '999']]);
     } catch {}
+  }
+
+  async function getAudit() {
+    const out = await redisCmd(['LRANGE', 'audit:log', '0', '99']);
+    if (!Array.isArray(out)) return [];
+    return out.map((x) => { try { return JSON.parse(x); } catch { return null; } }).filter(Boolean);
+  }
+
+  async function loadAdminData() {
+    const [whitelist, blacklist, bansAll, audit, panelIps] = await Promise.all([listWhitelist(), listBlacklist(), listBans(), getAudit(), listPanelIps()]);
+    const trusted = new Set(whitelist.map((w) => w.ip));
+    return { gateOn, whitelist, blacklist, panelIps, bans: bansAll.filter((b) => !trusted.has(b.ip) && OWNER_LIST.indexOf(b.ip) === -1), audit };
+  }
+
+  // ★ البند 6: تنبيه تليجرام (fail-safe: أي فشل يتجاهل ومايكسرش العملية)
+  async function notifyTelegram(text) {
+    const tok = process.env.TELEGRAM_BOT_TOKEN || '';
+    const chat = process.env.TELEGRAM_CHAT_ID || '';
+    if (!tok || !chat) return;
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 3000);
+      await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chat, text: String(text).slice(0, 3500), disable_web_page_preview: true }),
+        signal: ctl.signal
+      });
+      clearTimeout(timer);
+    } catch {}
+  }
+
+  async function redisDel(key) {
+    if (!redisEnabled) return;
+    await redisJson(`${redisUrl}/del/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${redisToken}` }
+    });
   }
 
   // ★ التحقق بالإيميل (2FA): الرمز بيتبعت على ADMIN_EMAIL عن طريق Resend
@@ -1187,12 +1482,209 @@ export default async function handler(req, res) {
     } catch { return false; }
   }
 
-  // IP من Vercel headers
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-              req.headers['x-real-ip'] || 'unknown';
-  const banKey = `ban:${ip}`;
+  // ★ البند 3 و 4: IP من Vercel headers ← x-real-ip ← socket، وبعدين رفض لو مش IP صالح
+  const hdrStr = (n) => String(req.headers[n] || '');
+  const ipCandidates = [
+    hdrStr('x-forwarded-for').split(',')[0],
+    hdrStr('x-real-ip'),
+    req.socket && req.socket.remoteAddress ? String(req.socket.remoteAddress) : ''
+  ].map((c) => c.trim().replace(/%.*$/, '').replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i, '$1'));
+  const ip = ipCandidates.find((c) => c && c !== 'unknown' && isIP(c)) || '';
+  const ipKnown = !!ip;
+  const ipKey = ipKnown ? banPrefix(ip) : '';   // IPv4 كامل، IPv6 → /64
+  const banKey = `ban:${ipKey}`;
+  const who = () => (ipKey && ipKey !== ip ? `${ip} (${ipKey}/64)` : ip);
+
+  // ★ صاحبة النظام: OWNER_IPS من env بس (مابتتسجل ولا بتظهر في أي رد/لوج). IPv6 بيتحوّل لـ /64 زي باقي الكود
+  const OWNER_LIST = String(process.env.OWNER_IPS || '').split(',').map((x) => normalizeIpInput(x)).filter(Boolean);
+  const isOwner = () => ipKnown && OWNER_LIST.indexOf(ipKey) !== -1;
+
+  // ★ RECOVERY_IPS / PANEL_IPS: من env بس (مابتظهر في HTML ولا audit — بنسجّل الـ IP اللي حاول بس)
+  const parseIpList = (raw) => String(raw || '').split(',').map((x) => x.trim()).filter(Boolean)
+    .map((x) => normalizeIpInput(x)).filter(Boolean);
+  const RECOVERY_IPS = parseIpList(process.env.RECOVERY_IPS);
+  const PANEL_IPS_CONFIGURED = String(process.env.PANEL_IPS || '').split(',').some((x) => x.trim());
+  const PANEL_IPS = parseIpList(process.env.PANEL_IPS);
+
+  // ★ تنبيه/audit للرفض بدون إغراق: audit أول رفض لكل IP في الساعة، وتليجرام 5 كحد أقصى/ساعة/IP
+  async function rejectAlert(kind, action, text) {
+    if (!redisEnabled || !ipKnown) return;
+    const key = `rej:${kind}:${ipKey}:${Math.floor(Date.now() / 3600000)}`;
+    const n = await redisCmd(['INCR', key]);
+    if (typeof n !== 'number') return;
+    if (n === 1) await redisCmd(['EXPIRE', key, '7200']);
+    const jobs = [];
+    if (n === 1) jobs.push(auditLog(action, { target: ipKey }));
+    if (n <= 5) jobs.push(notifyTelegram(text));
+    await Promise.all(jobs);
+  }
+
+  // حالة القوائم (بتتحمّل مرة واحدة في الطلب)
+  let isBlack = false;
+  let isWhite = false;
+  // ★ حالة بوابة الدخول من Redis (panel_gate:enabled = '1' → مفعلة). Redis وقع/مش موجود = مقفولة (fail-open)
+  let gateOn = false;
+  async function loadListState() {
+    if (!redisEnabled) return;
+    const cmds = [['GET', 'panel_gate:enabled']];
+    if (ipKnown) cmds.push(['GET', 'blacklist:' + ipKey], ['GET', 'whitelist:' + ipKey]);
+    const r = await redisPipeline(cmds);
+    gateOn = !!(r[0] && r[0].result === '1');
+    if (!ipKnown) return;
+    isBlack = !!(r[1] && r[1].result);
+    if (isBlack && isOwner()) isBlack = false;   // ★ الـ owner بيتخطى السوداء كمان (عشان مايتقفلش على نفسه)
+    const w = r[2] && r[2].result;
+    if (w) {
+      try {
+        const o = JSON.parse(w);
+        if (o.expiresAt && o.expiresAt <= Date.now()) {   // منتهية → نظّفها واعتبره عادي
+          await redisDel('whitelist:' + ipKey);
+          await auditLog('whitelist_expired', { target: ipKey });
+        } else isWhite = true;
+      } catch { isWhite = false; }
+    }
+  }
+
+  // ★ البند 5: Rate limit على GET — 100 طلب/دقيقة لكل IP (Redis INCR + EXPIRE، fail-open لو Redis وقع)
+  async function rateLimitGet() {
+    if (isOwner() || isRecovery) return false;   // ★ الـ owner والـ recovery مايتقفلوش بالـ rate limit
+    if (!redisEnabled || !ipKnown) return false;
+    const key = `rl:get:${ipKey}:${Math.floor(Date.now() / 60000)}`;
+    const n = await redisCmd(['INCR', key]);
+    if (typeof n !== 'number') return false;
+    if (n === 1) await redisCmd(['EXPIRE', key, '120']);
+    return n > 100;
+  }
+
+  // ★ RECOVERY_CODE: بيتجاوز فحص الحظر بس (مش الباسورد ولا الـ OTP). الكود مابيتسجّل في أي مكان
+  const RECOVERY_CODE = String(process.env.RECOVERY_CODE || '').trim();
+  const RECOVERY_ENABLED = RECOVERY_CODE.length >= 52;   // أقصر من كده = الميزة مقفولة
+  let isRecovery = false;
+  let recoveryViaParam = false;
+
+  // كوكي قصير (15 دقيقة) مربوط بالـ IP — عشان الـ POST (الباسورد ثم الرمز) مابيشيلش الـ query
+  function recoveryToken() {
+    const ts = Date.now().toString();
+    return ts + '.' + crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${ts}.${ipKey}`).digest('hex');
+  }
+  function verifyRecoveryToken(tok) {
+    const parts = String(tok || '').split('.');
+    if (parts.length !== 2 || !(Date.now() - parseInt(parts[0]) <= 15 * 60000)) return false;
+    try {
+      const exp = crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${parts[0]}.${ipKey}`).digest('hex');
+      return crypto.timingSafeEqual(Buffer.from(parts[1]), Buffer.from(exp));
+    } catch { return false; }
+  }
+
+  async function loadRecovery() {
+    if (!RECOVERY_ENABLED || !ipKnown) return;
+    let param = '';
+    try { param = new URL(req.url, 'http://x').searchParams.get('recovery') || ''; } catch {}
+    const viaParam = !!param && safeEq(param, RECOVERY_CODE);
+    const cm = (req.headers.cookie || '').match(/recovery_ok=([^;]+)/);
+    const viaCookie = !viaParam && !!cm && verifyRecoveryToken(cm[1]);
+    if (!viaParam && !viaCookie) return;
+    // ★ الكود لوحده مش كفاية: لازم الـ IP كمان يكون في RECOVERY_IPS (فاضي = مقفول). بنتأكد في كل طلب (query + كوكي)
+    if (RECOVERY_IPS.indexOf(ipKey) === -1) {
+      await bumpRecoveryCounter();   // المحاولة بتتحسب في سقف الـ 10/ساعة برضه
+      await rejectAlert('recovery_ip', 'recovery_ip_rejected', `⚠️ محاولة استخدام RECOVERY_CODE من IP غير مسموح: ${who()}`);
+      return;
+    }
+    // سقف أمان: لو اتجرّب 10 مرات غلط تحت الـ recovery في ساعة → التجاوز بيتقفل (fail-open لو Redis وقع)
+    const used = parseInt((await redisGet(`rec:fail:${ipKey}:${Math.floor(Date.now() / 3600000)}`)) || '0', 10);
+    if (used >= 10) return;
+    isRecovery = true;
+    recoveryViaParam = viaParam;
+  }
+
+  async function bumpRecoveryCounter() {
+    if (!redisEnabled || !ipKnown) return;
+    const key = `rec:fail:${ipKey}:${Math.floor(Date.now() / 3600000)}`;
+    const n = await redisCmd(['INCR', key]);
+    if (n === 1) await redisCmd(['EXPIRE', key, '7200']);
+  }
+  async function noteRecoveryFail() {
+    if (isRecovery) await bumpRecoveryCounter();
+  }
+
+  // ★ cooldown الرمز للـ whitelist/owner: 20 رمز غلط في الساعة → وقف ساعة (مش حظر)
+  async function bumpExemptOtp() {
+    if (!redisEnabled) return false;
+    const n = await redisCmd(['INCR', 'wl:otp:' + ipKey]);
+    if (typeof n !== 'number') return false;
+    if (n === 1) await redisCmd(['EXPIRE', 'wl:otp:' + ipKey, '3600']);
+    if (n >= 20) {
+      await redisCmd(['SET', 'wl:otp:cooldown:' + ipKey, '1', 'EX', '3600']);
+      return true;
+    }
+    return false;
+  }
+  async function exemptCooldownActive() {
+    if (!(isWhite || isOwner())) return false;
+    return !!(await redisGet('wl:otp:cooldown:' + ipKey));
+  }
+
+  // ★ IPs مسموح لها مؤقتًا/دائمًا بشاشة الأدمن (Redis: panel_ip:<prefix>) — المنتهية بتتنضف
+  async function listPanelIps() {
+    const rows = await getJsonMany(await scanKeys('panel_ip:*'));
+    const out = [];
+    for (const { key, val: p } of rows) {
+      if (!p) continue;
+      if (p.expiresAt && p.expiresAt <= Date.now()) {
+        await redisDel(key);
+        await auditLog('panel_ip_temp_del', { target: key.slice(9), note: 'انتهت المدة' });
+        continue;
+      }
+      out.push({ ip: key.slice(9), ...p });
+    }
+    return out.sort((x, y) => (y.addedAt || 0) - (x.addedAt || 0));
+  }
+
+  // temp access صالح لـ IP (Redis: panel_ip:<prefix>) — المنتهي بيتنضف
+  async function getTempAccess(key) {
+    if (!redisEnabled || !key) return null;
+    const raw = await redisGet('panel_ip:' + key);
+    if (!raw) return null;
+    try {
+      const p = JSON.parse(raw);
+      if (!p.expiresAt || p.expiresAt > Date.now()) return p;
+      await redisDel('panel_ip:' + key);
+      await auditLog('panel_ip_temp_del', { target: key, note: 'انتهت المدة' });
+    } catch {}
+    return null;
+  }
+
+  // ★ مسموح له بالدخول؟ PANEL_IPS + OWNER_IPS + recovery (كود + IP) + الوايت ليست + temp access
+  async function isPanelAllowed() {
+    if (isOwner() || isRecovery) return true;
+    if (ipKnown && PANEL_IPS.indexOf(ipKey) !== -1) return true;
+    if (isWhite) return true;
+    return !!(await getTempAccess(ipKey));
+  }
+
+  // ★ بوابة الدخول: true → 404. بتشتغل بس لما panel_gate:enabled = '1' (من شاشة الأدمن)
+  async function panelGateBlocks() {
+    if (!gateOn) return false;   // مقفولة (أو Redis وقع) → تخطي كامل، مفيش 404
+    if (PANEL_IPS_CONFIGURED && PANEL_IPS.length === 0 && redisEnabled) {   // env متظبط بس كله غلط → تنبيه (مرة/ساعة)
+      const k = 'cfg:panel_ips_empty:' + Math.floor(Date.now() / 3600000);
+      const n = await redisCmd(['INCR', k]);
+      if (n === 1) {
+        await redisCmd(['EXPIRE', k, '7200']);
+        await Promise.all([auditLog('panel_ips_misconfig', {}), notifyTelegram('⚠️ PANEL_IPS متظبط بس كل القيم فيه غلط — راجعي الـ env.')]);
+      }
+    }
+    if (await isPanelAllowed()) return false;
+    await rejectAlert('panel_ip', 'panel_ip_rejected', `🚫 محاولة دخول من IP غير مسموح (البوابة مفعلة): ${who()}`);
+    return true;
+  }
 
   async function checkBan() {
+    // ★ صاحبة النظام ورابط الطوارئ: تجاوز كامل لفحص الحظر (من غير Redis)
+    if (isOwner()) return null;
+    if (isRecovery) return null;
+    // ★ البند 9/10: السوداء أولًا (بتتغلب على البيضاء) ← البيضاء مابتتحظرش أبدًا
+    if (isBlack) return { level: 'perm', message: '🚫 تم حظرك بشكل دائم من الدخول للوحة.' };
+    if (isWhite) return null;
     const banRaw = await redisGet(banKey);
     if (!banRaw) return null;
     try {
@@ -1209,14 +1701,36 @@ export default async function handler(req, res) {
     } catch { return null; }
   }
 
-  async function recordFailedAttempt() {
+  async function recordFailedAttempt(kind = 'password') {
     const banRaw = await redisGet(banKey);
     let ban;
     try { ban = banRaw ? JSON.parse(banRaw) : { fails: 0, level: 'none' }; }
     catch { ban = { fails: 0, level: 'none' }; }
-    
+
     ban.fails = (ban.fails || 0) + 1;
-    
+    const failNo = ban.fails;
+    const failAction = kind === 'otp' ? 'otp_fail' : 'login_fail';
+    await noteRecoveryFail();
+
+    // ★ صاحبة النظام: نسجّل + تنبيه بس — مايتحظرش أبدًا
+    if (isOwner()) {
+      await redisSet(banKey, JSON.stringify(ban));
+      await auditLog('owner_fail', { kind: 'password', fails: failNo });
+      if (failNo === 1 || failNo % 5 === 0) await notifyTelegram(`⚠️ محاولة دخول فاشلة من IP صاحبة النظام (${failNo})\nIP: ${who()}`);
+      return;
+    }
+
+    // ★ البيضاء: نسجّل بس ومنحظرش — لكن نبعت تنبيه لو المحاولات كتيرة (ممكن يكون اختراق)
+    if (isWhite) {
+      await redisSet(banKey, JSON.stringify(ban));
+      await auditLog(failAction, { fails: failNo, trusted: 'yes' });
+      if (failNo % 5 === 0) {
+        await notifyTelegram(`⚠️ IP في القائمة البيضاء عنده ${failNo} محاولة دخول فاشلة — ممكن يكون اختراق!\nIP: ${who()}`);
+      }
+      return;
+    }
+
+    let newLevel = '';
     if (ban.fails >= 5) {
       if (ban.level === 'temp') {
         ban.level = 'perm';
@@ -1226,18 +1740,111 @@ export default async function handler(req, res) {
         ban.until = Date.now() + 86400000;
       }
       ban.fails = 0;
+      newLevel = ban.level;
     }
     await redisSet(banKey, JSON.stringify(ban));
+    await auditLog(failAction, { fails: failNo });
+
+    if (newLevel === 'temp') {
+      await Promise.all([auditLog('ban_temp', { target: ipKey }), notifyTelegram(`⏳ حظر مؤقت 24 ساعة بعد 5 محاولات فاشلة\nIP: ${who()}`)]);
+    } else if (newLevel === 'perm') {
+      await Promise.all([auditLog('ban_perm', { target: ipKey }), notifyTelegram(`🚫 حظر دائم (تكرار بعد الحظر المؤقت)\nIP: ${who()}`)]);
+    } else if (failNo === 1) {
+      await notifyTelegram(`⚠️ أول محاولة دخول فاشلة (1/5)\nIP: ${who()}`);
+    }
   }
 
-  async function resetFails() {
+  // ★ فشل رمز الأدمن: 5 مرات غلط (مجموعة عبر كل الرموز، مش لكل رمز) = حظر دائم على طول
+  async function recordOtpFailure() {
+    const banRaw = await redisGet(banKey);
+    let ban;
+    try { ban = banRaw ? JSON.parse(banRaw) : { fails: 0, level: 'none' }; }
+    catch { ban = { fails: 0, level: 'none' }; }
+    ban.otpFails = (ban.otpFails || 0) + 1;
+    const n = ban.otpFails;
+    await noteRecoveryFail();
+
+    // ★ صاحبة النظام: نسجّل + تنبيه بس — مايتحظرش أبدًا (لكن لسه عليه cooldown 20 غلطة/ساعة)
+    if (isOwner()) {
+      await redisSet(banKey, JSON.stringify(ban));
+      await auditLog('owner_fail', { kind: 'otp', tries: n });
+      if (n === 1 || n % 5 === 0) await notifyTelegram(`⚠️ رمز أدمن غلط من IP صاحبة النظام (${n})\nIP: ${who()}`);
+      const cd = await bumpExemptOtp();
+      if (cd) await Promise.all([auditLog('otp_cooldown', {}), notifyTelegram(`⏳ وقف ساعة بعد 20 رمز غلط (IP صاحبة النظام)\nIP: ${who()}`)]);
+      return { perm: false, left: null, exempt: true, cooldown: cd };
+    }
+
+    // الموثوق (whitelist): نسجّل ونبعت تنبيه بس ومنحظرش (cooldown بعد 20 غلطة/ساعة)
+    if (isWhite) {
+      await redisSet(banKey, JSON.stringify(ban));
+      await auditLog('otp_fail', { tries: n, trusted: 'yes' });
+      if (n % 5 === 0) await notifyTelegram(`⚠️ IP في القائمة البيضاء غلط في رمز الأدمن ${n} مرة — ممكن يكون اختراق!\nIP: ${who()}`);
+      const cd = await bumpExemptOtp();
+      if (cd) await Promise.all([auditLog('otp_cooldown', {}), notifyTelegram(`⏳ وقف ساعة بعد 20 رمز غلط (IP موثوق)\nIP: ${who()}`)]);
+      return { perm: false, left: null, exempt: true, cooldown: cd };
+    }
+
+    if (n >= 5) {
+      ban.level = 'perm';
+      delete ban.until;
+      ban.fails = 0;
+      ban.otpFails = 0;
+      await redisSet(banKey, JSON.stringify(ban));
+      await Promise.all([
+        auditLog('otp_fail', { tries: n }),
+        auditLog('ban_perm', { target: ipKey, reason: 'رمز الأدمن غلط 5 مرات' }),
+        notifyTelegram(`🚫 حظر دائم — رمز الأدمن غلط 5 مرات\nIP: ${who()}`)
+      ]);
+      return { perm: true, left: 0 };
+    }
+    await redisSet(banKey, JSON.stringify(ban));
+    await auditLog('otp_fail', { tries: n });
+    if (n === 1) await notifyTelegram(`⚠️ رمز أدمن غلط (1/5)\nIP: ${who()}`);
+    return { perm: false, left: 5 - n };
+  }
+
+  // alsoOtp=true بس عند نجاح الأدمن بالرمز (باسورد اللوحة العادية مايصفّرش عدّاد الرمز)
+  async function resetFails(alsoOtp = false) {
     const banRaw = await redisGet(banKey);
     if (!banRaw) return;
     try {
       const ban = JSON.parse(banRaw);
       ban.fails = 0;
+      if (alsoOtp) ban.otpFails = 0;
       await redisSet(banKey, JSON.stringify(ban));
     } catch {}
+  }
+
+  // ★ ترتيب الفحص: recovery (الكود + IP مسموح) → owner → حالة القوائم → بوابة الدخول (404، لما تتفعّل)
+  //   → blacklist (403) → unknown IP (400) → rate limit (GET) → checkBan → (whitelist بتتخطى الحظر) → باسورد/OTP
+  await loadRecovery();
+  if (isRecovery && recoveryViaParam) {
+    // رابط الطوارئ: بيتجاوز الحظر والبوابة. بنثبّت كوكي قصير ونبعت تنبيه فوري (من غير ما نسجّل الكود نفسه)
+    res.setHeader('Set-Cookie', `recovery_ok=${recoveryToken()}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
+    await Promise.all([
+      auditLog('recovery_used', {}),
+      notifyTelegram(`🆘 اتستخدم رابط الطوارئ (recovery)\nIP: ${who()}\nلو مش إنتي — غيّري RECOVERY_CODE فورًا.`)
+    ]);
+  }
+  await loadListState();   // حالة البوابة + blacklist + whitelist (طلب Redis واحد)
+  if (await panelGateBlocks()) {
+    // 404 عام (مش 403 — مايفضحش إن فيه صفحة هنا) + مسح كوكي الأدمن
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Set-Cookie', 'admin_auth=; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+    return res.status(404).send('<h1>404 Not Found</h1>');
+  }
+  if (isBlack) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.status(403).send('Forbidden');   // من غير حتى صفحة دخول
+  }
+  if (!ipKnown) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.status(400).send('Bad Request');
+  }
+  if (req.method === 'GET' && (await rateLimitGet())) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Retry-After', '60');
+    return res.status(429).send(renderLogin({ banMessage: '⏳ طلبات كتير جدًا. استني دقيقة وجرّبي تاني.' }));
   }
 
   // ★ البند 1: POST login بدل GET
@@ -1267,20 +1874,126 @@ export default async function handler(req, res) {
       if (!verifyToken(am ? am[1] : '', 'admin')) {
         return res.status(401).send(renderLogin());
       }
+      const back = () => res.redirect(303, req.url.split('?')[0]);
+      const target = normalizeIpInput(body.ip);
+      const msgPage = (msg) => {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(400).send('<!DOCTYPE html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>مرفوض</title><body style="font-family:Tahoma,sans-serif;padding:24px"><h1>' + msg + '</h1><p><a href="/api/admin">رجوع</a></p></body></html>');
+      };
+
       if (body.action === 'unban') {
-        const target = typeof body.ip === 'string' ? body.ip.trim() : '';
-        if (/^[0-9a-fA-F:.]{2,45}$|^unknown$/.test(target)) await redisDel('ban:' + target);
-        return res.redirect(303, req.url.split('?')[0]);
+        // بنمسح المفتاح الموحّد + المفتاح الخام (لسجلات قديمة اتخزنت بالـ IPv6 الكامل)
+        const raw = typeof body.ip === 'string' ? body.ip.trim() : '';
+        if (target) await redisDel('ban:' + target);
+        if (raw && raw !== target && /^[0-9a-fA-F:.]{2,45}$/.test(raw)) await redisDel('ban:' + raw);
+        if (target) {
+          await Promise.all([auditLog('unban', { target }), notifyTelegram(`🔓 تم فك حظر\nIP: ${shownKey(target)}\nبواسطة: ${ip}`)]);
+        }
+        return back();
       }
+
+      // ✅ القائمة البيضاء
+      if (body.action === 'wl_add' && target) {
+        const durMs = { '1h': 3600000, '1d': 86400000, '1w': 604800000 }[String(body.duration)];
+        const rec = { addedBy: ip, addedAt: Date.now(), note: cleanText(body.note, 120) };
+        if (durMs) rec.expiresAt = Date.now() + durMs;
+        await redisSet('whitelist:' + target, JSON.stringify(rec));
+        await auditLog('whitelist_add', { target, note: rec.note, expires: rec.expiresAt ? 'مؤقت' : 'دائم' });
+        return back();
+      }
+      if (body.action === 'wl_del' && target) {
+        // البوابة مفعلة + ده الـ IP الحالي + الوايت ليست هي السبب الوحيد في دخوله → ممنوع (هتتقفلي بره)
+        if (gateOn && target === ipKey && !isOwner() && !isRecovery && PANEL_IPS.indexOf(ipKey) === -1 && !(await getTempAccess(ipKey))) {
+          return msgPage('⚠️ لو مسحتي ده، هتتقفلي بره فورًا — الـ IP ده هو اللي بيسمحلك بالدخول دلوقتي (البوابة مفعلة). العملية اتلغت.');
+        }
+        await redisDel('whitelist:' + target);
+        await auditLog('whitelist_del', { target });
+        return back();
+      }
+
+      // 🌐 IPs المسموح لها بشاشة الأدمن (temp access)
+      // 🚪 تفعيل/إلغاء بوابة الدخول (to = on | off)
+      if (body.action === 'panel_gate_toggle') {
+        const turnOn = String(body.to) === 'on';
+        if (turnOn) {
+          // مايتفعّلش لو IP الأدمن نفسه مش مسموح (عشان ماتتقفلش بره فورًا)
+          if (!(await isPanelAllowed())) {
+            return msgPage('⚠️ لو فعّلتي البوابة دلوقتي هتتقفلي بره فورًا — الـ IP بتاعك مش في أي قايمة مسموحة (PANEL_IPS / OWNER_IPS / الوايت ليست / IPs المسموحة). ضيفي نفسك الأول.');
+          }
+          if (!(await redisSet('panel_gate:enabled', '1'))) return msgPage('❌ مقدرناش نحفظ الحالة (Redis مش متاح).');
+        } else {
+          if (typeof (await redisCmd(['DEL', 'panel_gate:enabled'])) !== 'number') return msgPage('❌ مقدرناش نحفظ الحالة (Redis مش متاح).');
+        }
+        await Promise.all([
+          auditLog(turnOn ? 'panel_gate_on' : 'panel_gate_off', {}),
+          notifyTelegram(turnOn
+            ? `🟢 اتفعّلت بوابة الدخول — أي IP مش في القوايم هيشوف 404\nبواسطة: ${ip}`
+            : `🔴 اتلغت بوابة الدخول — كل الناس بتشوف صفحة الدخول\nبواسطة: ${ip}`)
+        ]);
+        return back();
+      }
+      if (body.action === 'panel_ip_add' && target) {
+        const durMs = { '1h': 3600000, '1d': 86400000, '1w': 604800000 }[String(body.duration)];
+        if (!durMs) {   // دائم: حد أقصى 10
+          const permCount = (await listPanelIps()).filter((p) => !p.expiresAt && p.ip !== target).length;
+          if (permCount >= 10) return msgPage('❌ وصلتي للحد الأقصى (10 IPs دائمة). امسحي واحد الأول أو اختاري مدة.');
+        }
+        const rec = { addedBy: ipKey, addedAt: Date.now(), note: cleanText(body.note, 120) };
+        if (durMs) rec.expiresAt = Date.now() + durMs;
+        await redisSet('panel_ip:' + target, JSON.stringify(rec));
+        await Promise.all([
+          auditLog('panel_ip_temp_add', { target, note: rec.note, expires: rec.expiresAt ? 'مؤقت' : 'دائم' }),
+          notifyTelegram(`🌐 اتضاف IP مسموح لشاشة الأدمن\nIP: ${shownKey(target)} (${rec.expiresAt ? 'مؤقت' : 'دائم'})\nبواسطة: ${ip}`)
+        ]);
+        return back();
+      }
+      if (body.action === 'panel_ip_del' && target) {
+        // مايتمسحش IP الأدمن لو هو السبب الوحيد في دخوله (عشان ماتتقفلش بره)
+        const onlyViaTemp = gateOn && target === ipKey &&
+          PANEL_IPS.indexOf(ipKey) === -1 && !isOwner() && !isRecovery && !isWhite;
+        if (onlyViaTemp) return msgPage('⚠️ لو مسحتي ده، هتتقفلي بره شاشة الأدمن فورًا — الـ IP ده هو اللي بيسمحلك بالدخول دلوقتي. العملية اتلغت.');
+        await redisDel('panel_ip:' + target);
+        await Promise.all([
+          auditLog('panel_ip_temp_del', { target }),
+          notifyTelegram(`🗑️ اتحذف IP من المسموح لشاشة الأدمن\nIP: ${shownKey(target)}\nبواسطة: ${ip}`)
+        ]);
+        return back();
+      }
+
+      // 🚫 القائمة السوداء (السبب إجباري، ومايتحظرش الأدمن نفسه)
+      if (body.action === 'bl_add' && target) {
+        const reason = cleanText(body.reason, 120);
+        if (!reason) return back();
+        // ★ مايتحظرش الـ IP الحالي ولا أي IP من OWNER_IPS (الرسالة عامة — مابتكشفش القيم)
+        if (target === ipKey || OWNER_LIST.indexOf(target) !== -1) {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.status(400).send('<!DOCTYPE html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>مرفوض</title><body style="font-family:Tahoma,sans-serif;padding:24px"><h1>❌ العملية دي مش مسموحة على الـ IP ده.</h1><p><a href="/api/admin">رجوع</a></p></body></html>');
+        }
+        await redisSet('blacklist:' + target, JSON.stringify({ addedBy: ip, addedAt: Date.now(), reason, permanent: true }));
+        await auditLog('blacklist_add', { target, reason });
+        return back();
+      }
+      if (body.action === 'bl_del' && target) {
+        await redisDel('blacklist:' + target);
+        await auditLog('blacklist_del', { target });
+        return back();
+      }
+
       if (body.action === 'logout') {
+        await auditLog('logout', {});
         res.setHeader('Set-Cookie', 'admin_auth=; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-        return res.redirect(303, req.url.split('?')[0]);
+        return back();
       }
-      return res.redirect(303, req.url.split('?')[0]);
+      return back();
     }
 
     // ★ الخطوة 2: رمز الإيميل
     if (typeof body.code !== 'undefined') {
+      // ★ cooldown الموثوق/صاحبة النظام: لو واقف ساعة → 429 فورًا
+      if (await exemptCooldownActive()) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(429).send(renderLogin({ mode: 'code', banMessage: '⏳ استني ساعة وجرّبي تاني.' }));
+      }
       const code = String(body.code).trim();
       const pm = cookieHdr.match(/panel_pending=([a-f0-9]{32})/);
       const otpId = pm ? pm[1] : '';
@@ -1300,7 +2013,9 @@ export default async function handler(req, res) {
       }
       if (ok) {
         await redisDel('otp:' + otpId);
-        await resetFails();
+        await resetFails(true);
+        if (isWhite || isOwner()) await redisDel('wl:otp:' + ipKey);   // تنضيف عدّاد الـ cooldown بعد دخول ناجح
+        await auditLog('login_ok', { role: 'admin' });
         const token = makeToken('admin');
         res.setHeader('Set-Cookie', [
           `admin_auth=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=7200`,
@@ -1308,12 +2023,18 @@ export default async function handler(req, res) {
         ]);
         return res.redirect(303, req.url.split('?')[0]);
       }
+      const otpRes = await recordOtpFailure();
+      if (otpRes.cooldown) {
+        return res.status(429).send(renderLogin({ mode: 'code', banMessage: '⏳ استني ساعة وجرّبي تاني.' }));
+      }
+      if (otpRes.perm) {
+        await redisDel('otp:' + otpId);
+        res.setHeader('Set-Cookie', clearPending);
+        return res.status(429).send(renderLogin({ mode: 'code', banMessage: '🚫 تم حظرك بشكل دائم من الدخول للوحة.' }));
+      }
       rec.tries = (rec.tries || 0) + 1;
       await redisSet('otp:' + otpId, JSON.stringify(rec));
-      await recordFailedAttempt();
-      const banCode = await checkBan();
-      if (banCode) return res.status(429).send(renderLogin({ mode: 'code', banMessage: banCode.message }));
-      return res.status(401).send(renderLogin({ mode: 'code', error: true, message: '❌ الرمز غلط' }));
+      return res.status(401).send(renderLogin({ mode: 'code', error: true, message: otpRes.exempt ? '❌ الرمز غلط' : '❌ الرمز غلط — باقي ' + otpRes.left + ' محاولات قبل الحظر الدائم' }));
     }
 
     const pass = typeof body.password === 'string' ? body.password : '';
@@ -1321,6 +2042,7 @@ export default async function handler(req, res) {
     // ★ كلمة السر الأولى → دخول مباشر للوحة الإشعارات (من غير إيميل)
     if (safeEq(pass, PANEL_PASSWORD)) {
       await resetFails();
+      await auditLog('login_ok', { role: 'panel' });
       const token = makeToken('panel');
       res.setHeader('Set-Cookie', `panel_auth=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`);
       return res.redirect(303, req.url.split('?')[0]);
@@ -1335,12 +2057,16 @@ export default async function handler(req, res) {
       }
       const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
       const id = crypto.randomBytes(16).toString('hex');
-      await redisSet('otp:' + id, JSON.stringify({ h: hashCode(otp, id), exp: Date.now() + OTP_TTL_MS, tries: 0 }));
+      const stored = await redisSet('otp:' + id, JSON.stringify({ h: hashCode(otp, id), exp: Date.now() + OTP_TTL_MS, tries: 0 }));
+      if (!stored) {   // Redis واقع → ماتبعتش إيميل برمز مش هيشتغل
+        return res.status(503).send('<h1>الخدمة مش متاحة دلوقتي. جرّبي تاني بعد شوية.</h1>');
+      }
       const sent = await sendOtpEmail(otp);
       if (!sent) {
         await redisDel('otp:' + id);
         return res.status(502).send('<h1>مقدرناش نبعت الإيميل. جرّبي تاني بعد شوية.</h1>');
       }
+      await Promise.all([auditLog('otp_sent', {}), notifyTelegram(`📧 اتبعت رمز دخول (أدمن)\nIP: ${who()}`)]);
       res.setHeader('Set-Cookie', `panel_pending=${id}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=600`);
       return res.status(200).send(renderLogin({ mode: 'code' }));
     }
@@ -1368,7 +2094,7 @@ export default async function handler(req, res) {
     const adminMatch = (req.headers.cookie || '').match(/admin_auth=([^;]+)/);
     if (verifyToken(adminMatch ? adminMatch[1] : '', 'admin')) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(renderAdminPage(await listBans(), ip));
+      return res.status(200).send(renderAdminPage(await loadAdminData(), ipKey));
     }
 
     // التحقق من Cookie
