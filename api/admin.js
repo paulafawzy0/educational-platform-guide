@@ -1778,15 +1778,17 @@ export default async function handler(req, res) {
   let recoveryViaParam = false;
 
   // كوكي قصير (15 دقيقة) مربوط بالـ IP — عشان الـ POST (الباسورد ثم الرمز) مابيشيلش الـ query
+  // ★ الكوكي مابيتربطش بالـ IP غير لو RECOVERY_IPS متظبطة (IP الموبايل بيتغير، والكود لوحده بيفتح من أي IP أصلًا)
+  const recBind = () => (RECOVERY_IPS_CONFIGURED ? ipKey : '*');
   function recoveryToken() {
     const ts = Date.now().toString();
-    return ts + '.' + crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${ts}.${ipKey}`).digest('hex');
+    return ts + '.' + crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${ts}.${recBind()}`).digest('hex');
   }
   function verifyRecoveryToken(tok) {
     const parts = String(tok || '').split('.');
     if (parts.length !== 2 || !(Date.now() - parseInt(parts[0]) <= 15 * 60000)) return false;
     try {
-      const exp = crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${parts[0]}.${ipKey}`).digest('hex');
+      const exp = crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${parts[0]}.${recBind()}`).digest('hex');
       return crypto.timingSafeEqual(Buffer.from(parts[1]), Buffer.from(exp));
     } catch { return false; }
   }
@@ -2061,6 +2063,9 @@ export default async function handler(req, res) {
       auditLog('recovery_used', {}),
       notifyTelegram(`🆘 اتستخدم رابط الطوارئ (recovery)\nIP: ${who()}\nلو مش إنتي — غيّري RECOVERY_CODE فورًا.`)
     ]);
+  } else if (isRecovery) {
+    // ★ تجديد الكوكي مع كل طلب سليم (15 دقيقة من آخر استخدام). ممكن ردود تانية تكتب Set-Cookie خاص بيها (زي نجاح الدخول) فتحل محله
+    res.setHeader('Set-Cookie', `recovery_ok=${recoveryToken()}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
   }
   await loadListState();   // panel_mode + حالة البوابة + blacklist + whitelist (طلب Redis واحد)
   // ★ Kill Switch: stealth (أو مش موجود / Redis وقع) → 404 لكل الناس (حتى الوايت ليست و OWNER_IPS)، ماعدا اللي معاه الرابط السري.
