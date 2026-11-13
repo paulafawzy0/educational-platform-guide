@@ -6,17 +6,17 @@ const CODE = 'R'.repeat(60);
 Object.assign(process.env, {
   PANEL_PASSWORD: 'panelpass', ADMIN_PASSWORD: 'adminpass', ADMIN_EMAIL: 'a@b.c', RESEND_API_KEY: 'k',
   OWNER_IPS: '1.1.1.1', PANEL_IPS: '2.2.2.2', RECOVERY_IPS: '3.3.3.3', RECOVERY_CODE: CODE,
-  TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: 'c', UPSTASH_REDIS_REST_URL: URL_, UPSTASH_REDIS_REST_TOKEN: 'x',
+  TELEGRAM_Notifications_BOT_TOKEN: 't', TELEGRAM_Notifications_CHAT_ID: 'c', UPSTASH_REDIS_REST_URL: URL_, UPSTASH_REDIS_REST_TOKEN: 'x',
   PUBLIC_API_URL: 'https://x.vercel.app/api/push-send'
 });
 
 let store, lists, telegram, emails, redisDown;
-const reset = () => { store = new Map(); lists = new Map(); telegram = []; emails = []; redisDown = false; };
+const reset = () => { store = new Map(); store.set('panel_mode', 'open'); lists = new Map(); telegram = []; emails = []; redisDown = false; };
 const glob = (p) => new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
 function exec(c) {
   const [op, ...a] = c; const O = op.toUpperCase();
   if (O === 'GET') return store.has(a[0]) ? store.get(a[0]) : null;
-  if (O === 'SET') { store.set(a[0], String(a[1])); return 'OK'; }
+  if (O === 'SET') { if (a.includes('NX') && store.has(a[0])) return null; store.set(a[0], String(a[1])); return 'OK'; }
   if (O === 'DEL') { return store.delete(a[0]) ? 1 : 0; }
   if (O === 'INCR') { const n = (parseInt(store.get(a[0]) || '0', 10)) + 1; store.set(a[0], String(n)); return n; }
   if (O === 'EXPIRE') return 1;
@@ -60,7 +60,7 @@ async function call({ ip, method = 'GET', url = '/api/admin', body, cookie }) {
   return r;
 }
 const isLogin = (r) => r.status === 401 && r.body.includes('تسجيل الدخول');
-const is404 = (r) => r.status === 404 && r.body.includes('404');
+const is404 = (r) => r.status === 404 && r.body.includes('NOT_FOUND');
 const gateOn = () => store.set('panel_gate:enabled', '1');
 const auditHas = (a) => (lists.get('audit:log') || []).some((x) => JSON.parse(x).a === a);
 const adminPost = (ip, body) => call({ ip, method: 'POST', body, cookie: adminCookie() });
@@ -100,14 +100,14 @@ T('S3 5 غلطات OTP → حظر دائم', async () => {
   return codes.slice(0, 4).every((c) => c === 401) && codes[4] === 429 && ban(ip).level === 'perm'
     && after.status === 429 && auditHas('ban_perm'); });
 
-T('S4 recovery من IP في RECOVERY_IPS → تجاوز الحظر (ومن IP تاني لأ)', async () => {
+T('S4 recovery من IP في RECOVERY_IPS → تجاوز الحظر (303)، ومن IP تاني → 404 (الـ IP بيتحظر دائم)', async () => {
   store.set('ban:3.3.3.3', JSON.stringify({ level: 'perm', fails: 0 }));
-  store.set('ban:9.9.9.9', JSON.stringify({ level: 'perm', fails: 0 }));
+  store.set('ban:9.9.9.9', JSON.stringify({ level: 'temp', until: Date.now() + 3600000, fails: 0 }));
   const noCode = await call({ ip: '3.3.3.3' });
   const withCode = await call({ ip: '3.3.3.3', url: '/api/admin?recovery=' + CODE });
   const wrongIp = await call({ ip: '9.9.9.9', url: '/api/admin?recovery=' + CODE });
-  return noCode.status === 429 && withCode.status === 401 && withCode.body.includes('تسجيل الدخول')
-    && wrongIp.status === 429 && auditHas('recovery_used') && auditHas('recovery_ip_rejected'); });
+  return noCode.status === 429 && withCode.status === 303 && withCode.headers.location === '/api/admin' && wrongIp.status === 404
+    && JSON.parse(store.get('ban:9.9.9.9')).level === 'perm' && auditHas('recovery_used') && auditHas('ban_perm'); });
 
 T('S5 whitelist → يتخطى الحظر (غلط كتير مايحظرش، والباسورد الصح يدخل)', async () => {
   const ip = '4.4.4.4'; store.set('whitelist:' + ip, '{"addedAt":1}');

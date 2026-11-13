@@ -9,14 +9,17 @@
 //   ★ جديد:
 //   ALLOWED_ORIGIN      — الـ origin الوحيد المسموح له بـ CORS (مثال https://your-domain.vercel.app)
 //                         لو فاضي: مفيش CORS خالص (same-origin بس)
-//   TELEGRAM_BOT_TOKEN  — توكن بوت التنبيهات (اختياري)
-//   TELEGRAM_CHAT_ID    — الشات اللي بتوصله التنبيهات (اختياري)
+//   TELEGRAM_Notifications_BOT_TOKEN — ★ توكن البوت الأمني (اختياري). اتغيّر اسمه من TELEGRAM_BOT_TOKEN ومفيش fallback للاسم القديم
+//   TELEGRAM_Notifications_CHAT_ID   — ★ الشات اللي بتوصله التنبيهات الأمنية (اختياري). اتغيّر اسمه من TELEGRAM_CHAT_ID
 //   OWNER_IPS           — IPs صاحبة النظام (IPv4/IPv6 مفصولين بفاصلة) — مابتتحظرش أبدًا (لسه محتاجة الباسورد)
 //   RECOVERY_CODE       — كود طوارئ (52 حرف عشوائي على الأقل) بيتجاوز فحص الحظر بس: /api/admin?recovery=CODE
 //                         لسه محتاج ADMIN_PASSWORD + رمز الإيميل. لو أقل من 52 حرف الميزة بتتعطّل.
 //   RECOVERY_IPS        — ★ اختيارية: IPs المسموح لها تستخدم RECOVERY_CODE (مفصولين بفاصلة، IPv6 → /64).
 //                         متظبطة → لازم الـ IP فيها. مش موجودة خالص → الكود لوحده يكفي. متظبطة بس كلها غلط → الـ recovery مقفول (fail-closed)
-//                         سقف عام: 20 محاولة فاشلة/ساعة (كل الـ IPs) تحت الـ recovery → بعدها الـ recovery بيتقفل ساعة (تغيير الكود بيصفّره)
+//                         سقف عام: 100 محاولة فاشلة/ساعة (كل الـ IPs) تحت الـ recovery → بعدها الـ recovery بيتقفل ساعة (تغيير الكود بيصفّره)
+//                         كوكي الـ recovery صالح 7 أيام (بيتجدد مع كل استخدام) — تغيير RECOVERY_CODE بيبطل كل الكوكيز فورًا
+//   api/[...catchall].js — ★ شبكة صيد: أي مسار مش موجود تحت /api/ بيتنادى منه handler ده بـ { trap: true } → 404 مقلّد + حظر دائم للـ IP
+//                         (بس لو الطلب مش جاي من متصفح: Sec-Fetch-Site مش موجود — عشان محدش يقدر يحظر ناس بـ <img> من موقع تاني)
 //   panel_mode (Redis)  — ★ Kill Switch: open | stealth. أي قيمة تانية / مش موجودة / Redis وقع = stealth (fail-closed).
 //                         stealth: كل الطلبات 404 (مقلّد لصفحة Vercel، من غير أي header بتاعنا) ومحدش بيعدي غير بـ ?recovery=CODE
 //   PANEL_IPS           — IPs مسموح لها بالدخول لما "بوابة الدخول" تكون مفعلة (من شاشة الأدمن، مقفولة افتراضيًا).
@@ -1078,6 +1081,9 @@ function renderAdminPage(d, currentKey) {
   const e = escapeHtml;
   const fmt = (t) => new Date(t).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
   const me = (k) => (k === currentKey ? ' <span class="me">(ده الـ IP بتاعك)</span>' : '');
+  // ★ أزرار تحكم سريع جنب أي IP (🚫 حظر / 🔓 فك حظر شامل) — بتشتغل بسكريبت ثابت على data-* (من غير form لكل صف)
+  const qb = (k) => ' <span class="qa"><button type="button" class="qb del" data-act="manual_ban" data-ip="' + e(k) + '" title="حظر (سوداء + دائم)">🚫 حظر</button>' +
+    '<button type="button" class="qb" data-act="unban" data-ip="' + e(k) + '" title="فك حظر شامل">🔓 فك</button></span>';
   const post = (action, fields, label, cls) =>
     '<form method="POST" action="/api/admin"><input type="hidden" name="action" value="' + action + '">' +
     Object.keys(fields).map((k) => '<input type="hidden" name="' + k + '" value="' + e(fields[k]) + '">').join('') +
@@ -1085,7 +1091,7 @@ function renderAdminPage(d, currentKey) {
 
   // ✅ القائمة البيضاء
   const wlRows = d.whitelist.length ? d.whitelist.map((w) =>
-    '<tr><td dir="ltr">' + e(shownKey(w.ip)) + me(w.ip) + '</td><td>' + e(w.note || '—') + '</td><td dir="ltr">' + e(w.addedBy || '—') +
+    '<tr><td dir="ltr">' + e(shownKey(w.ip)) + me(w.ip) + qb(w.ip) + '</td><td>' + e(w.note || '—') + '</td><td dir="ltr">' + e(w.addedBy || '—') +
     '</td><td>' + e(w.addedAt ? fmt(w.addedAt) : '—') + '</td><td>' + (w.expiresAt ? e(fmt(w.expiresAt)) : 'دائم') +
     '</td><td>' + post('wl_del', { ip: w.ip }, '🗑️ حذف', 'del') + '</td></tr>'
   ).join('') : '<tr><td colspan="6" class="empty">القائمة فاضية</td></tr>';
@@ -1100,7 +1106,7 @@ function renderAdminPage(d, currentKey) {
     const info = nm[p.ip] || { count: 0, last: 0 };
     const act = Math.max(info.last || 0, ll[p.ip] || 0);
     return '<tr data-pip="' + e(String(p.ip).toLowerCase()) + '" data-mode="' + (p.expiresAt ? 'temp' : 'perm') + '">' +
-      '<td dir="ltr">' + e(shownKey(p.ip)) + me(p.ip) + '</td><td>' + e(p.note || '—') + '</td><td dir="ltr">' + e(p.addedBy || '—') +
+      '<td dir="ltr">' + e(shownKey(p.ip)) + me(p.ip) + qb(p.ip) + '</td><td>' + e(p.note || '—') + '</td><td dir="ltr">' + e(p.addedBy || '—') +
       '</td><td>' + e(p.addedAt ? fmt(p.addedAt) : '—') + '</td><td>' + (p.expiresAt ? e(fmt(p.expiresAt)) : '⚠️ دائم') +
       (isExp ? ' <span class="exp">(منتهي)</span>' : '') +
       '</td><td>' + e(info.count || 0) + '</td><td>' + (act ? e(fmt(act)) : '—') +
@@ -1116,13 +1122,13 @@ function renderAdminPage(d, currentKey) {
   const nfRows = d.notifs && d.notifs.length ? d.notifs.map((n) => {
     const x = n.detail || {};
     const det = [x.title, x.dept, x.section, x.course, x.instructor, x.classType].filter(Boolean).join(' • ');
-    return '<tr><td dir="ltr">' + e(shownKey(n.ip)) + me(n.ip) + '</td><td>' + e(n.count) + '</td><td>' +
+    return '<tr><td dir="ltr">' + e(shownKey(n.ip)) + me(n.ip) + qb(n.ip) + '</td><td>' + e(n.count) + '</td><td>' +
       (n.last ? e(fmt(n.last)) : '—') + ' — ' + e(det || '—') + (x.sent != null ? ' — وصل: ' + e(x.sent) : '') + '</td></tr>';
   }).join('') : '<tr><td colspan="3" class="empty">لسه مفيش إشعارات اتبعتت</td></tr>';
 
   // 🚫 القائمة السوداء
   const blRows = d.blacklist.length ? d.blacklist.map((b) =>
-    '<tr><td dir="ltr">' + e(shownKey(b.ip)) + me(b.ip) + '</td><td>' + e(b.reason || '—') + '</td><td dir="ltr">' + e(b.addedBy || '—') +
+    '<tr><td dir="ltr">' + e(shownKey(b.ip)) + me(b.ip) + qb(b.ip) + '</td><td>' + e(b.reason || '—') + '</td><td dir="ltr">' + e(b.addedBy || '—') +
     '</td><td>' + e(b.addedAt ? fmt(b.addedAt) : '—') +
     '</td><td>' + post('bl_del', { ip: b.ip }, '🗑️ حذف', 'del') + '</td></tr>'
   ).join('') : '<tr><td colspan="5" class="empty">القائمة فاضية</td></tr>';
@@ -1134,7 +1140,7 @@ function renderAdminPage(d, currentKey) {
     else if (b.level === 'temp' && b.until > Date.now()) status = '⏳ مؤقت — ينتهي ' + e(fmt(b.until));
     else if (b.level === 'temp') status = '⌛ المؤقت انتهى (أي 5 محاولات غلط تانية = دائم)';
     else status = '⚠️ محاولات فاشلة بس (' + e(b.fails || 0) + ')';
-    return '<tr><td dir="ltr">' + e(shownKey(b.ip)) + me(b.ip) + '</td><td>' + status + '</td><td>' + post('unban', { ip: b.ip }, '🔓 فك الحظر') + '</td></tr>';
+    return '<tr><td dir="ltr">' + e(shownKey(b.ip)) + me(b.ip) + qb(b.ip) + '</td><td>' + status + '</td><td>' + post('unban', { ip: b.ip }, '🔓 فك الحظر') + '</td></tr>';
   }).join('') : '<tr><td colspan="3" class="empty">مفيش أي IP محظور حاليًا ✅</td></tr>';
 
   // 📜 سجل العمليات
@@ -1149,6 +1155,7 @@ function renderAdminPage(d, currentKey) {
     panel_gate_on: '🟢 تفعيل بوابة الدخول', panel_gate_off: '🔴 إلغاء بوابة الدخول',
     notif_sent: '📤 إرسال إشعار', notif_dry: '🧪 تجربة إشعار', rate_limit: '⏳ تجاوز حد الطلبات',
     panel_ip_purge: '🧹 مسح IPs منتهية', sendkey_fail: '🔑 مفتاح إرسال غلط',
+    manual_ban: '🚫 حظر يدوي', trap_hit: '🕸️ مسار مش موجود (IP موثوق)', sendkey_lock: '🔒 قفل مفتاح الإرسال', recovery_bad: '⚠️ recovery غلط (موثوق)',
     panel_mode_open: '🟢 اللوحة → open', panel_mode_stealth: '🔴 اللوحة → stealth', recovery_cap: '🛑 سقف الـ recovery العام'
   };
   // ★ التحسين 1: التفاصيل نص عادي (بيتعمله escape وقت العرض) — أول 80 حرف + tooltip بالكامل
@@ -1181,6 +1188,15 @@ function renderAdminPage(d, currentKey) {
       ? 'أي IP مش في القوايم (PANEL_IPS / OWNER_IPS / الوايت ليست / IPs المسموحة / recovery) بيشوف 404 على كل حاجة. لو حد جديد عايز يدخل، ضيفيه في الوايت ليست وهتتفتح له فورًا.'
       : 'كل الناس بتشوف صفحة الدخول. فعّليها لما الـ users يدخلوا ويستخدموا النظام الأول.') + '</p>' +
     post('panel_gate_toggle', { to: d.gateOn ? 'off' : 'on' }, d.gateOn ? '🔴 إلغاء البوابة' : '🟢 تفعيل البوابة', d.gateOn ? 'del' : '');
+
+  // 🚫 صندوق حظر/فك حظر سريع (أول الشاشة) + form مخفي بيستخدمه سكريبت الأزرار
+  const quickBox =
+    '<h2 class="bl">🚫 حظر / فك حظر سريع</h2>' +
+    '<p class="sub">اكتبي أي IP (IPv6 بيتطبق على الـ /64 كله). "حظر" = سوداء + حظر دائم. "فك حظر" = مسح شامل (حظر + سوداء + عدّادات مفتاح الإرسال والـ recovery).</p>' +
+    '<form method="POST" action="/api/admin" class="add"><input name="ip" dir="ltr" placeholder="IP" required maxlength="45">' +
+    '<input name="reason" placeholder="السبب (اختياري)" maxlength="120">' +
+    '<button type="submit" name="action" value="manual_ban" class="del">🚫 حظر</button><button type="submit" name="action" value="unban">🔓 فك حظر</button></form>' +
+    '<form id="qf" method="POST" action="/api/admin" style="display:none"><input type="hidden" name="action" id="qfa"><input type="hidden" name="ip" id="qfi"><input type="hidden" name="reason" id="qfr"></form>';
 
   // 🕶️ Kill Switch (panel_mode)
   const isOpen = d.panelMode === 'open';
@@ -1231,12 +1247,16 @@ function renderAdminPage(d, currentKey) {
   button.out2 { background: #475569; }
   .exp { color: #f87171; font-size: 12px; }
   p.warn { color: #fbbf24; }
+  .qa { white-space: nowrap; margin-inline-start: 6px; }
+  button.qb { padding: 2px 7px; font-size: 11px; border-radius: 6px; margin-inline-start: 3px; }
 </style>
 </head>
 <body>
 <div class="box">
   <h1>🛡️ إدارة الدخول</h1>
   <p class="sub">عناوين IPv6 بتتطبق على الـ /64 كله. القائمة السوداء بتتغلب على البيضاء.</p>
+
+  ${quickBox}
 
   ${modeSection}
 
@@ -1344,13 +1364,22 @@ function renderAdminPage(d, currentKey) {
   });
   g('pIp').addEventListener('input', piFilter);
   g('pMode').addEventListener('change', piFilter);
+  // أزرار 🚫/🔓 جنب أي IP: بتملا الـ form المخفي وتبعته (الحظر بيسأل تأكيد)
+  document.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('.qb') : null;
+    if (!b) return;
+    var act = b.getAttribute('data-act'), ip = b.getAttribute('data-ip');
+    if (act === 'manual_ban' && !confirm('حظر ' + ip + ' ؟ (سوداء + حظر دائم)')) return;
+    g('qfa').value = act; g('qfi').value = ip; g('qfr').value = 'حظر يدوي من الجدول';
+    g('qf').submit();
+  });
 })();
 </script>
 </body>
 </html>`;
 }
 
-export default async function handler(req, res) {
+export default async function handler(req, res, opts) {
   // ★ البند 6: apiUrl من env var
   const PUBLIC_API_URL = process.env.PUBLIC_API_URL || '';
   let apiOrigin = '';
@@ -1649,7 +1678,7 @@ export default async function handler(req, res) {
   }
   // 🔒 البوت الأمني: محاولات فاشلة، حظر، IP غير مسموح، recovery، rate limit، رمز الأدمن
   async function notifyTelegram(text) {
-    await sendTelegram(process.env.TELEGRAM_BOT_TOKEN || '', process.env.TELEGRAM_CHAT_ID || '', text, 3500);
+    await sendTelegram(process.env.TELEGRAM_Notifications_BOT_TOKEN || '', process.env.TELEGRAM_Notifications_CHAT_ID || '', text, 3500);
   }
   // 📋 بوت السجل (التحسين 4): العمليات العادية — حد 500 حرف. لو LOG_BOT_TOKEN أو LOG_CHAT_ID فاضي → fallback للبوت الأمني
   async function notifyLog(text) {
@@ -1776,6 +1805,7 @@ export default async function handler(req, res) {
   const RECOVERY_ENABLED = RECOVERY_CODE.length >= 52;   // أقصر من كده = الميزة مقفولة
   let isRecovery = false;
   let recoveryViaParam = false;
+  let recoveryBad = '';   // ★ سبب لو ?recovery= اتبعت بكود غلط (أو بكود صح من IP مش مسموح) — العقوبة بتتنفذ بعد loadListState
 
   // كوكي قصير (15 دقيقة) مربوط بالـ IP — عشان الـ POST (الباسورد ثم الرمز) مابيشيلش الـ query
   // ★ الكوكي مابيتربطش بالـ IP غير لو RECOVERY_IPS متظبطة (IP الموبايل بيتغير، والكود لوحده بيفتح من أي IP أصلًا)
@@ -1786,7 +1816,7 @@ export default async function handler(req, res) {
   }
   function verifyRecoveryToken(tok) {
     const parts = String(tok || '').split('.');
-    if (parts.length !== 2 || !(Date.now() - parseInt(parts[0]) <= 15 * 60000)) return false;
+    if (parts.length !== 2 || !(Date.now() - parseInt(parts[0]) <= 7 * 86400000)) return false;
     try {
       const exp = crypto.createHmac('sha256', RECOVERY_CODE).update(`recovery.${parts[0]}.${recBind()}`).digest('hex');
       return crypto.timingSafeEqual(Buffer.from(parts[1]), Buffer.from(exp));
@@ -1798,18 +1828,22 @@ export default async function handler(req, res) {
     let param = '';
     try { param = new URL(req.url, 'http://x').searchParams.get('recovery') || ''; } catch {}
     const viaParam = !!param && safeEq(param, RECOVERY_CODE);
+    // ★ ?recovery= موجود بس غلط → حظر دائم + 404 (بتتنفذ بعد ما نعرف الوايت ليست). مش بتتطبق لو الميزة مقفولة (كود < 52 حرف) عشان ماتحظريش نفسك لو الإعداد غلط
+    if (param && !viaParam) { recoveryBad = 'كود recovery غلط'; return; }
     const cm = (req.headers.cookie || '').match(/recovery_ok=([^;]+)/);
     const viaCookie = !viaParam && !!cm && verifyRecoveryToken(cm[1]);
     if (!viaParam && !viaCookie) return;
     // ★ RECOVERY_IPS اختيارية: متظبطة → لازم الـ IP فيها (وكلها غلط = مقفول). مش موجودة → الكود لوحده يكفي. بنتأكد في كل طلب (query + كوكي)
+    if (RECOVERY_IPS_CONFIGURED && RECOVERY_IPS.length === 0) return;   // متظبطة بس كلها غلط → الـ recovery مقفول (من غير حظر — ده خطأ إعداد مش هجوم)
     if (RECOVERY_IPS_CONFIGURED && RECOVERY_IPS.indexOf(ipKey) === -1) {
       await bumpRecoveryCounter();   // المحاولة بتتحسب في سقف الـ 10/ساعة برضه
-      await rejectAlert('recovery_ip', 'recovery_ip_rejected', `⚠️ محاولة استخدام RECOVERY_CODE من IP غير مسموح: ${who()}`);
+      if (viaParam) recoveryBad = 'كود recovery صح بس من IP مش في RECOVERY_IPS';   // ★ بالرابط → حظر دائم
+      else await rejectAlert('recovery_ip', 'recovery_ip_rejected', `⚠️ محاولة استخدام كوكي recovery من IP غير مسموح: ${who()}`);
       return;
     }
-    // ★ السقف العام: 20 محاولة فاشلة/ساعة على كل الـ IPs تحت الـ recovery → التجاوز بيتقفل (مفتاح العدّاد مربوط ببصمة الكود، فتغيير الكود بيصفّره)
-    if ((parseInt(await redisGet(recGlobalKey()), 10) || 0) >= 20) {
-      await rejectAlert('recovery_cap', 'recovery_cap', `🛑 سقف محاولات الـ recovery العام (20/ساعة) اتعدّى — الـ recovery مقفول لحد ما الساعة تخلص أو تغيّري RECOVERY_CODE. آخر IP: ${who()}`);
+    // ★ السقف العام: 100 محاولة فاشلة/ساعة على كل الـ IPs تحت الـ recovery → التجاوز بيتقفل (مفتاح العدّاد مربوط ببصمة الكود، فتغيير الكود بيصفّره)
+    if ((parseInt(await redisGet(recGlobalKey()), 10) || 0) >= 100) {
+      await rejectAlert('recovery_cap', 'recovery_cap', `🛑 سقف محاولات الـ recovery العام (100/ساعة) اتعدّى — الـ recovery مقفول لحد ما الساعة تخلص أو تغيّري RECOVERY_CODE. آخر IP: ${who()}`);
       return;
     }
     // سقف أمان: لو اتجرّب 10 مرات غلط تحت الـ recovery في ساعة → التجاوز بيتقفل (fail-open لو Redis وقع)
@@ -1836,22 +1870,7 @@ export default async function handler(req, res) {
     if (isRecovery) await bumpRecoveryCounter();
   }
 
-  // ★ cooldown الرمز للـ whitelist/owner: 20 رمز غلط في الساعة → وقف ساعة (مش حظر)
-  async function bumpExemptOtp() {
-    if (!redisEnabled) return false;
-    const n = await redisCmd(['INCR', 'wl:otp:' + ipKey]);
-    if (typeof n !== 'number') return false;
-    if (n === 1) await redisCmd(['EXPIRE', 'wl:otp:' + ipKey, '3600']);
-    if (n >= 20) {
-      await redisCmd(['SET', 'wl:otp:cooldown:' + ipKey, '1', 'EX', '3600']);
-      return true;
-    }
-    return false;
-  }
-  async function exemptCooldownActive() {
-    if (!(isWhite || isOwner())) return false;
-    return !!(await redisGet('wl:otp:cooldown:' + ipKey));
-  }
+  // ★ (اتلغى) وقف الساعة بعد 20 رمز غلط للوايت ليست/OWNER — الموثوقين مايتضرّوش. الحماية الباقية: 5 محاولات/رمز + قفل إرسال الرمز 60 ثانية
 
   // ★ IPs مسموح لها مؤقتًا/دائمًا بشاشة الأدمن (Redis: panel_ip:<prefix>) — المنتهية بتتنضف
   async function listPanelIps() {
@@ -1914,6 +1933,27 @@ export default async function handler(req, res) {
     res.setHeader('X-Vercel-Error', 'NOT_FOUND');
     res.setHeader('X-Vercel-Id', id);
     return res.status(404).send(`The page could not be found\n\nNOT_FOUND\n\n${id}\n`);
+  }
+
+  // ★ عقوبة recovery غلط: حظر دائم (الـ OWNER والوايت ليست: تنبيه بس من غير حظر). لو الـ IP محظور دائم أصلًا مافيش تنبيه تاني (منع الإغراق)
+  async function punishBadRecovery(reason, trustedAction = 'recovery_bad') {
+    if (!redisEnabled) return;
+    if (isOwner() || isWhite) {
+      await Promise.all([auditLog(trustedAction, { reason }), notifyTelegram(`⚠️ ${reason} من IP موثوق/صاحبة النظام (مافيش حظر)\nIP: ${who()}`)]);
+      return;
+    }
+    try { if (JSON.parse(await redisGet(banKey) || 'null').level === 'perm') return; } catch {}
+    await redisSet(banKey, JSON.stringify({ fails: 0, level: 'perm' }));
+    await Promise.all([auditLog('ban_perm', { target: ipKey, reason }), notifyTelegram(`🚫 حظر دائم — ${reason}\nIP: ${who()}`)]);
+  }
+
+  // ★ شبكة الصيد: طلب لمسار مش موجود تحت /api/ → حظر دائم للـ IP (الـ OWNER/الوايت ليست: تنبيه بس).
+  //   مابيتحظرش لو الطلب جاي من متصفح (Sec-Fetch-Site موجود): cross-site = حد بيحاول يحظر ناس بـ <img>/link، same-origin = frontend قديم. السكانرز (curl/bots) مابيبعتوش الـ header ده
+  async function trapHit() {
+    if (!ipKnown || String(req.headers['sec-fetch-site'] || '')) return;
+    let path = '';
+    try { path = new URL(req.url, 'http://x').pathname; } catch {}
+    await punishBadRecovery('مسار مش موجود: ' + cut(path, 60), 'trap_hit');
   }
 
   async function checkBan() {
@@ -2007,9 +2047,7 @@ export default async function handler(req, res) {
       await redisSet(banKey, JSON.stringify(ban));
       await auditLog('owner_fail', { kind: 'otp', tries: n });
       if (n === 1 || n % 5 === 0) await notifyTelegram(`⚠️ رمز أدمن غلط من IP صاحبة النظام (${n})\nIP: ${who()}`);
-      const cd = await bumpExemptOtp();
-      if (cd) await Promise.all([auditLog('otp_cooldown', {}), notifyTelegram(`⏳ وقف ساعة بعد 20 رمز غلط (IP صاحبة النظام)\nIP: ${who()}`)]);
-      return { perm: false, left: null, exempt: true, cooldown: cd };
+      return { perm: false, left: null, exempt: true };
     }
 
     // الموثوق (whitelist): نسجّل ونبعت تنبيه بس ومنحظرش (cooldown بعد 20 غلطة/ساعة)
@@ -2017,9 +2055,7 @@ export default async function handler(req, res) {
       await redisSet(banKey, JSON.stringify(ban));
       await auditLog('otp_fail', { tries: n, trusted: 'yes' });
       if (n % 5 === 0) await notifyTelegram(`⚠️ IP في القائمة البيضاء غلط في رمز الأدمن ${n} مرة — ممكن يكون اختراق!\nIP: ${who()}`);
-      const cd = await bumpExemptOtp();
-      if (cd) await Promise.all([auditLog('otp_cooldown', {}), notifyTelegram(`⏳ وقف ساعة بعد 20 رمز غلط (IP موثوق)\nIP: ${who()}`)]);
-      return { perm: false, left: null, exempt: true, cooldown: cd };
+      return { perm: false, left: null, exempt: true };
     }
 
     if (n >= 5) {
@@ -2055,19 +2091,33 @@ export default async function handler(req, res) {
 
   // ★ ترتيب الفحص: recovery (الكود + IP مسموح) → owner → حالة القوائم → بوابة الدخول (404، لما تتفعّل)
   //   → blacklist (403) → unknown IP (400) → rate limit (GET) → checkBan → (whitelist بتتخطى الحظر) → باسورد/OTP
+  // ★ شبكة الصيد (api/[...catchall].js بينادي الـ handler بـ { trap: true } — العميل مايقدرش يبعت الـ argument ده)
+  if (opts && opts.trap === true) {
+    await loadListState();
+    await trapHit();
+    return sendStealth404();
+  }
   await loadRecovery();
   if (isRecovery && recoveryViaParam) {
     // رابط الطوارئ: بيتجاوز الحظر والبوابة. بنثبّت كوكي قصير ونبعت تنبيه فوري (من غير ما نسجّل الكود نفسه)
-    res.setHeader('Set-Cookie', `recovery_ok=${recoveryToken()}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
+    res.setHeader('Set-Cookie', `recovery_ok=${recoveryToken()}; Path=/api/admin; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`);
     await Promise.all([
       auditLog('recovery_used', {}),
       notifyTelegram(`🆘 اتستخدم رابط الطوارئ (recovery)\nIP: ${who()}\nلو مش إنتي — غيّري RECOVERY_CODE فورًا.`)
     ]);
+    // ★ GET بالكود الصح → redirect 303 لـ /api/admin من غير الكود (مايفضلش في الـ address bar/history). كوكي الـ recovery بقى Lax عشان يتبعت بعد الـ redirect
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      preflight();   // رؤوس الأمان (Referrer-Policy: no-referrer ... )
+      res.setHeader('Location', '/api/admin');
+      return res.status(303).end();
+    }
   } else if (isRecovery) {
-    // ★ تجديد الكوكي مع كل طلب سليم (15 دقيقة من آخر استخدام). ممكن ردود تانية تكتب Set-Cookie خاص بيها (زي نجاح الدخول) فتحل محله
-    res.setHeader('Set-Cookie', `recovery_ok=${recoveryToken()}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
+    // ★ تجديد الكوكي مع كل طلب سليم (7 أيام من آخر استخدام). ممكن ردود تانية تكتب Set-Cookie خاص بيها (زي نجاح الدخول) فتحل محله
+    res.setHeader('Set-Cookie', `recovery_ok=${recoveryToken()}; Path=/api/admin; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`);
   }
   await loadListState();   // panel_mode + حالة البوابة + blacklist + whitelist (طلب Redis واحد)
+  // ★ ?recovery= غلط → حظر دائم + 404 مقلّد (حتى لو اللوحة open)
+  if (recoveryBad) { await punishBadRecovery(recoveryBad); return sendStealth404(); }
   // ★ Kill Switch: stealth (أو مش موجود / Redis وقع) → 404 لكل الناس (حتى الوايت ليست و OWNER_IPS)، ماعدا اللي معاه الرابط السري.
   //   بيتفحص قبل أي حاجة تانية (حتى OPTIONS/POST cross-site) عشان مايبانش إن فيه handler هنا
   if (panelMode !== 'open' && !isRecovery) return sendStealth404();
@@ -2129,23 +2179,38 @@ export default async function handler(req, res) {
       const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
       if (!ADMIN_SECRET || !PUBLIC_API_URL) return jerr(500, 'ADMIN_SECRET / PUBLIC_API_URL مش متظبطين');
 
-      // ★ SEND_KEY: سر تالت مستقل — مطلوب للإرسال الفعلي بس (التجربة مابتبعتش حاجة). مش متظبط في السيرفر → الإرسال مقفول (fail-closed)
-      //   بيتقارن بـ safeEq. 5 مفاتيح غلط/ساعة/IP → قفل ساعة (الـ OWNER معفي من القفل مش من المفتاح). الـ lockout بيتخطى لو Redis وقع
+      // ★ SEND_KEY: سر تالت مستقل — مطلوب للإرسال الفعلي بس (التجربة مابتبعتش حاجة). مش متظبط في السيرفر → الإرسال مقفول (fail-closed). بيتقارن بـ safeEq.
+      //   5 غلط → قفل ساعة (429 حتى بالمفتاح الصح). بعد الساعة: 5 غلط كمان → حظر دائم على الـ IP (الوايت ليست: قفل بس من غير حظر).
+      //   الـ OWNER معفي من القفل والحظر (لسه محتاج المفتاح). مفتاح صح → العدّادات بتتصفّر. Redis وقع → المفتاح لسه مطلوب لكن القفل بيتخطى
       if (!dryRun) {
         const SEND_KEY = process.env.SEND_KEY || '';
         if (!SEND_KEY) return jerr(500, 'SEND_KEY مش متظبط في السيرفر');
-        const fk = `sendkey:fail:${ipKey}:${Math.floor(Date.now() / 3600000)}`;
-        if (!isOwner() && redisEnabled && (parseInt(await redisCmd(['GET', fk]), 10) || 0) >= 5) {
-          return jerr(429, 'محاولات كتير بمفتاح غلط. جرّبي بعد ساعة.');
-        }
+        const lockK = `sendkey:lock:${ipKey}`; const failK = `sendkey:fail:${ipKey}`; const strikeK = `sendkey:strikes:${ipKey}`;
+        const track = !isOwner() && redisEnabled;
+        if (track && (await redisGet(lockK))) return jerr(429, 'محاولات كتير بمفتاح غلط. جرّبي بعد ساعة.');
         if (!safeEq(typeof body.sendKey === 'string' ? body.sendKey : '', SEND_KEY)) {
-          if (!isOwner() && redisEnabled) {
-            const nf = await redisCmd(['INCR', fk]);
-            if (nf === 1) await redisCmd(['EXPIRE', fk, '7200']);
+          if (track) {
+            const nf = await redisCmd(['INCR', failK]);
+            if (nf === 1) await redisCmd(['EXPIRE', failK, '3600']);
+            if (typeof nf === 'number' && nf >= 5) {
+              await redisDel(failK);
+              const strikes = await redisCmd(['INCR', strikeK]);
+              if (typeof strikes === 'number' && strikes >= 2 && !isWhite) {
+                await redisSet(banKey, JSON.stringify({ fails: 0, level: 'perm' }));
+                await Promise.all([
+                  auditLog('ban_perm', { target: ipKey, reason: 'مفتاح الإرسال غلط 10 مرات' }),
+                  notifyTelegram(`🚫 حظر دائم — مفتاح الإرسال (SEND_KEY) غلط 10 مرات\nIP: ${who()}`)
+                ]);
+              } else {
+                await redisCmd(['SET', lockK, '1', 'EX', '3600']);
+                await Promise.all([auditLog('sendkey_lock', {}), notifyTelegram(`🔒 مفتاح الإرسال غلط 5 مرات — قفل ساعة\nIP: ${who()}`)]);
+              }
+            }
           }
           await rejectAlert('sendkey', 'sendkey_fail', `🔑 مفتاح إرسال غلط من: ${who()}`);
           return jerr(401, 'مفتاح الإرسال غلط');
         }
+        if (track) await Promise.all([redisDel(failK), redisDel(strikeK)]);
       }
 
       // ★ سقف 30 إرسال ناجح/ساعة/IP: بنقرا العدّاد قبل الإرسال وبنزوّده بعد 2xx بس (الفشل والتجارب مابتخصمش، والـ OWNER معفي).
@@ -2223,14 +2288,29 @@ export default async function handler(req, res) {
         return res.status(400).send('<!DOCTYPE html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>مرفوض</title><body style="font-family:Tahoma,sans-serif;padding:24px"><h1>' + msg + '</h1><p><a href="/api/admin">رجوع</a></p></body></html>');
       };
 
+      // 🔓 فك حظر شامل: بيمسح الـ IP (أو الـ /64) من كل حتة — حظر تلقائي + سوداء + عدّادات/قفل مفتاح الإرسال + عدّادات الـ recovery + قفل رمز الإيميل
       if (body.action === 'unban') {
-        // بنمسح المفتاح الموحّد + المفتاح الخام (لسجلات قديمة اتخزنت بالـ IPv6 الكامل)
         const raw = typeof body.ip === 'string' ? body.ip.trim() : '';
-        if (target) await redisDel('ban:' + target);
-        if (raw && raw !== target && /^[0-9a-fA-F:.]{2,45}$/.test(raw)) await redisDel('ban:' + raw);
         if (target) {
-          await Promise.all([auditLog('unban', { target }), notifyTelegram(`🔓 تم فك حظر\nIP: ${shownKey(target)}\nبواسطة: ${ip}`)]);
+          const hr = Math.floor(Date.now() / 3600000);
+          const keys = ['ban:' + target, 'blacklist:' + target, 'sendkey:fail:' + target, 'sendkey:strikes:' + target, 'sendkey:lock:' + target,
+            'otp:lock:' + target, `rec:fail:${target}:${hr}`, `rec:fail:${target}:${hr - 1}`];
+          // المفتاح الخام (لسجلات قديمة اتخزنت بالـ IPv6 الكامل)
+          if (raw && raw !== target && /^[0-9a-fA-F:.]{2,45}$/.test(raw)) keys.push('ban:' + raw);
+          await redisPipeline(keys.map((k) => ['DEL', k]));
+          await Promise.all([auditLog('unban', { target }), notifyTelegram(`🔓 تم فك حظر شامل\nIP: ${shownKey(target)}\nبواسطة: ${ip}`)]);
         }
+        return back();
+      }
+
+      // 🚫 حظر يدوي سريع: سوداء + حظر دائم (ban:) — الـ IPv6 على /64 (target اتحوّل بـ banPrefix). مايتحظرش الـ IP الحالي ولا OWNER_IPS
+      if (body.action === 'manual_ban' && target) {
+        if (target === ipKey || OWNER_LIST.indexOf(target) !== -1) return msgPage('❌ العملية دي مش مسموحة على الـ IP ده.');
+        const reason = cleanText(body.reason, 120) || 'حظر يدوي';
+        const okBl = await redisSet('blacklist:' + target, JSON.stringify({ addedBy: ip, addedAt: Date.now(), reason, permanent: true }));
+        const okBan = await redisSet('ban:' + target, JSON.stringify({ fails: 0, level: 'perm' }));
+        if (!okBl || !okBan) return msgPage('❌ مقدرناش نحفظ الحظر (Redis مش متاح).');
+        await Promise.all([auditLog('manual_ban', { target, reason }), notifyLog(`🚫 حظر يدوي\nIP: ${shownKey(target)}\nالسبب: ${cut(reason, 100)}\nبواسطة: ${ip}`)]);
         return back();
       }
 
@@ -2356,11 +2436,6 @@ export default async function handler(req, res) {
 
     // ★ الخطوة 2: رمز الإيميل
     if (typeof body.code !== 'undefined') {
-      // ★ cooldown الموثوق/صاحبة النظام: لو واقف ساعة → 429 فورًا
-      if (await exemptCooldownActive()) {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(429).send(renderLogin({ mode: 'code', banMessage: '⏳ استني ساعة وجرّبي تاني.' }));
-      }
       const code = String(body.code).trim();
       const pm = cookieHdr.match(/panel_pending=([a-f0-9]{32})/);
       const otpId = pm ? pm[1] : '';
@@ -2381,7 +2456,6 @@ export default async function handler(req, res) {
       if (ok) {
         await redisDel('otp:' + otpId);
         await resetFails(true);
-        if (isWhite || isOwner()) await redisDel('wl:otp:' + ipKey);   // تنضيف عدّاد الـ cooldown بعد دخول ناجح
         await Promise.all([auditLog('login_ok', { role: 'admin' }), notifyLog(`✅ دخول ناجح (أدمن)\nIP: ${who()}`)]);
         const token = makeToken('admin');
         res.setHeader('Set-Cookie', [
@@ -2391,9 +2465,6 @@ export default async function handler(req, res) {
         return res.redirect(303, req.url.split('?')[0]);
       }
       const otpRes = await recordOtpFailure();
-      if (otpRes.cooldown) {
-        return res.status(429).send(renderLogin({ mode: 'code', banMessage: '⏳ استني ساعة وجرّبي تاني.' }));
-      }
       if (otpRes.perm) {
         await redisDel('otp:' + otpId);
         res.setHeader('Set-Cookie', clearPending);
@@ -2422,14 +2493,23 @@ export default async function handler(req, res) {
       if (!ADMIN_EMAIL || !RESEND_API_KEY || !redisEnabled) {
         return res.status(500).send('<h1>التحقق بالإيميل مش متظبط (ADMIN_EMAIL / RESEND_API_KEY / Redis)</h1>');
       }
+      // ★ قفل إرسال الرمز: رمز واحد كل 60 ثانية لكل IP (SET NX). الضغط مرتين أو الريفريش مابيبعتش إيميل تاني، والرمز الأول يفضل صالح.
+      //   بيتاخد بعد ما الباسورد يتأكد (فمحدش يقدر يقفلها من غير الباسورد). فشل الإرسال/التخزين → القفل بيتشال
+      const otpLockKey = 'otp:lock:' + ipKey;
+      const lockRes = await redisCmd(['SET', otpLockKey, '1', 'EX', '60', 'NX']);
+      if (lockRes !== 'OK' && (await redisGet(otpLockKey))) {
+        return res.status(429).send(renderLogin({ mode: 'code', error: true, message: '⏳ الرمز اتبعت لسه على الإيميل — استني دقيقة قبل ما تطلبي رمز جديد، وكمّلي بالرمز اللي وصلك.' }));
+      }
       const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
       const id = crypto.randomBytes(16).toString('hex');
       const stored = await redisSet('otp:' + id, JSON.stringify({ h: hashCode(otp, id), exp: Date.now() + OTP_TTL_MS, tries: 0 }));
       if (!stored) {   // Redis واقع → ماتبعتش إيميل برمز مش هيشتغل
+        await redisDel(otpLockKey);
         return res.status(503).send('<h1>الخدمة مش متاحة دلوقتي. جرّبي تاني بعد شوية.</h1>');
       }
       const sent = await sendOtpEmail(otp);
       if (!sent) {
+        await redisDel(otpLockKey);
         await redisDel('otp:' + id);
         return res.status(502).send('<h1>مقدرناش نبعت الإيميل. جرّبي تاني بعد شوية.</h1>');
       }

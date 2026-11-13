@@ -6,17 +6,17 @@ const CODE = 'R'.repeat(60);
 Object.assign(process.env, {
   PANEL_PASSWORD: 'panelpass', ADMIN_PASSWORD: 'adminpass', ADMIN_EMAIL: 'a@b.c', RESEND_API_KEY: 'k',
   OWNER_IPS: '1.1.1.1', PANEL_IPS: '2.2.2.2', RECOVERY_IPS: '3.3.3.3', RECOVERY_CODE: CODE,
-  TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: 'c', UPSTASH_REDIS_REST_URL: URL_, UPSTASH_REDIS_REST_TOKEN: 'x',
+  TELEGRAM_Notifications_BOT_TOKEN: 't', TELEGRAM_Notifications_CHAT_ID: 'c', UPSTASH_REDIS_REST_URL: URL_, UPSTASH_REDIS_REST_TOKEN: 'x',
   PUBLIC_API_URL: 'https://x.vercel.app/api/push-send'
 });
 
 let store, lists, telegram, emails, redisDown;
-const reset = () => { store = new Map(); lists = new Map(); telegram = []; emails = []; redisDown = false; };
+const reset = () => { store = new Map(); store.set('panel_mode', 'open'); lists = new Map(); telegram = []; emails = []; redisDown = false; };
 const glob = (p) => new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
 function exec(c) {
   const [op, ...a] = c; const O = op.toUpperCase();
   if (O === 'GET') return store.has(a[0]) ? store.get(a[0]) : null;
-  if (O === 'SET') { store.set(a[0], String(a[1])); return 'OK'; }
+  if (O === 'SET') { if (a.includes('NX') && store.has(a[0])) return null; store.set(a[0], String(a[1])); return 'OK'; }
   if (O === 'DEL') { return store.delete(a[0]) ? 1 : 0; }
   if (O === 'INCR') { const n = (parseInt(store.get(a[0]) || '0', 10)) + 1; store.set(a[0], String(n)); return n; }
   if (O === 'EXPIRE') return 1;
@@ -60,7 +60,8 @@ async function call({ ip, method = 'GET', url = '/api/admin', body, cookie }) {
   return r;
 }
 const isLogin = (r) => r.status === 401 && r.body.includes('تسجيل الدخول');
-const is404 = (r) => r.status === 404 && r.body.includes('404');
+const passes = (r) => r.status === 303 && r.headers.location === '/api/admin';
+const is404 = (r) => r.status === 404 && r.body.includes('NOT_FOUND');
 const gateOn = () => store.set('panel_gate:enabled', '1');
 const auditHas = (a) => (lists.get('audit:log') || []).some((x) => JSON.parse(x).a === a);
 const adminPost = (ip, body) => call({ ip, method: 'POST', body, cookie: adminCookie() });
@@ -75,7 +76,7 @@ T('5  ON + RECOVERY_IPS + recovery code → دخول (وبدون الكود 404)
   gateOn();
   const a = await call({ ip: '3.3.3.3', url: '/api/admin?recovery=' + CODE });
   const b = await call({ ip: '3.3.3.3' });
-  return isLogin(a) && is404(b); });
+  return passes(a) && is404(b); });
 T('6  ON + temp access → دخول', async () => { gateOn(); store.set('panel_ip:5.5.5.5', JSON.stringify({ expiresAt: Date.now() + 3600000 })); return isLogin(await call({ ip: '5.5.5.5' })); });
 T('7  ON + IP بره → 404 + audit + telegram', async () => {
   gateOn(); const r = await call({ ip: '9.9.9.9' });
@@ -100,8 +101,8 @@ T('12 toggle OFF→ON → بره القوايم 404 (+audit +telegram)', async (
   const t = await adminPost('1.1.1.1', { action: 'panel_gate_toggle', to: 'on' });
   return t.status === 303 && store.get('panel_gate:enabled') === '1' && is404(await call({ ip: '9.9.9.9' }))
     && auditHas('panel_gate_on') && telegram.some((x) => x.includes('اتفعّلت')); });
-T('13 Redis وقع والبوابة ON → تتعتبر OFF (fail-open)', async () => {
-  gateOn(); redisDown = true; return isLogin(await call({ ip: '9.9.9.9' })); });
+T('13 Redis وقع والبوابة ON → stealth (fail-closed): 404', async () => {
+  gateOn(); redisDown = true; return is404(await call({ ip: '9.9.9.9' })); });
 T('14 IPv6 /64 في whitelist → مفتوحة لنفس الـ /64 بس', async () => {
   gateOn(); await adminPost('1.1.1.1', { action: 'wl_add', ip: '2001:db8:1:2::1', duration: 'perm' });
   const same = await call({ ip: '2001:db8:1:2:aaaa:bbbb:cccc:5' });
@@ -122,21 +123,22 @@ T('18 (إضافي) ON + blacklist + whitelist → 403 مش login', async () => {
   return (await call({ ip: '4.4.4.4' })).status === 403; });
 
 const timed = async (p) => { const t = Date.now(); const r = await p; return [r, Date.now() - t]; };
-T('19 (timeout) ON + Redis معلّق → صفحة دخول (fail-open) في أقل من 4 ثواني، مش 504', async () => {
+T('19 (timeout) Redis معلّق → 404 (fail-closed) في ~2.5 ثانية، مش 504', async () => {
   gateOn(); redisDown = 'hang';
   const [r, ms] = await timed(call({ ip: '9.9.9.9' }));
   console.log('     ↳ ' + ms + 'ms');
-  return isLogin(r) && ms >= 2400 && ms < 4000; });
-T('20 (timeout) Redis معلّق → الباسورد الصح لسه بيدخل (مش مقفولة بره)', async () => {
+  return is404(r) && ms >= 2400 && ms < 4000; });
+T('20 (timeout) Redis معلّق → الباسورد لوحده 404، لكن الرابط السري بيدخل (303) من غير ما يعتمد على Redis', async () => {
   redisDown = 'hang';
   const [r, ms] = await timed(call({ ip: '9.9.9.9', method: 'POST', body: { password: 'panelpass' } }));
-  console.log('     ↳ ' + ms + 'ms');
-  return r.status === 303 && ms < 4000; });
-T('21 (timeout) Redis معلّق + recovery من RECOVERY_IPS → مش بيتقفل', async () => {
+  const [r2, ms2] = await timed(call({ ip: '3.3.3.3', method: 'POST', url: '/api/admin?recovery=' + CODE, body: { password: 'panelpass' } }));
+  console.log('     ↳ ' + ms + 'ms / ' + ms2 + 'ms');
+  return is404(r) && r2.status === 303 && ms < 4000 && ms2 < 4000; });
+T('21 (timeout) Redis معلّق + recovery من RECOVERY_IPS → مش بيتقفل (303 → /api/admin)', async () => {
   gateOn(); redisDown = 'hang';
   const [r, ms] = await timed(call({ ip: '3.3.3.3', url: '/api/admin?recovery=' + CODE }));
   console.log('     ↳ ' + ms + 'ms');
-  return isLogin(r) && ms < 4000; });
+  return passes(r) && ms < 4000; });
 
 let pass = 0;
 for (const [n, f] of tests) {
